@@ -38,7 +38,8 @@ class XmbLayout(val width: Float, val height: Float) {
     fun items(model: XmbModel, motion: XmbMotion): List<Placement> {
         val out = ArrayList<Placement>()
         for (c in model.categories.indices) {
-            val columnAlpha = closeness(c - motion.category)
+            // Rows vanish within the first 40% of a column change so neighbours never overlap.
+            val columnAlpha = max(0f, 1f - abs(c - motion.category) * M.ROW_FADE_RATE)
             if (columnAlpha <= 0.01f) continue
             val x = columnX(c, motion.category)
             val scroll = motion.item(c)

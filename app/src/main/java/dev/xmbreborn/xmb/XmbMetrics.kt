@@ -31,6 +31,8 @@ object XmbMetrics {
     const val ITEM_LABEL_GAP = 22f
     const val ITEM_LABEL_SIZE = 22f
     const val ITEM_SUBTITLE_SIZE = 16f
+    /** How fast a column's rows fade as the bar scrolls away from it (1/columns). */
+    const val ROW_FADE_RATE = 2.5f
 
     // Motion: exponential approach time constant (s). ~4 constants to settle.
     const val FOCUS_TIME_CONSTANT = 0.055f

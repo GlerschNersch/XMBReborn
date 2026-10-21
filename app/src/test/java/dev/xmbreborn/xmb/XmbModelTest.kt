@@ -87,6 +87,17 @@ class XmbModelTest {
         assertEquals(3, rows.size)
     }
 
+    @Test fun neighbouringColumnsNeverShowRowsTogether() {
+        val m = model()
+        val motion = XmbMotion(m)
+        m.moveCategory(1)
+        val layout = XmbLayout(1280f, 720f)
+        while (motion.step(1 / 120f)) {
+            val visible = layout.items(m, motion).filter { it.alpha > 0.01f }.map { it.category }.toSet()
+            assertTrue("columns $visible visible at ${motion.category}", visible.size <= 1)
+        }
+    }
+
     @Test fun nightnessRampsAtDawnAndDusk() {
         assertEquals(1f, MonthPalette.nightness(2f), 0f)
         assertEquals(0.5f, MonthPalette.nightness(6f), 0.001f)
