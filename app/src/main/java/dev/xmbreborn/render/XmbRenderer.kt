@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.os.SystemClock
 import dev.xmbreborn.xmb.GlyphPainter
+import dev.xmbreborn.xmb.IconTint
 import dev.xmbreborn.xmb.ItemIcon
 import dev.xmbreborn.xmb.MonthPalette
 import dev.xmbreborn.xmb.OptionEntry
@@ -53,6 +54,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
     var themeColor = XmbPrefs.ORIGINAL
     private val shown = FloatArray(15)
     private var shownValid = false
+    /** Glyph icons lean toward the background's hue, like the XMB's environment-lit icons. */
+    private val glyphTint = FloatArray(3)
 
     // Options panel: the list, whether it's open, and its two animations (everything else
     // dimming, then the panel easing in). Kept until both have faded after closing.
@@ -116,7 +119,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
             old.focused.id.let { id -> newModel.categories.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let(newModel::setCategory) }
             for (c in newModel.categories) {
                 val prev = old.category(c.id) ?: continue
-                prev.focusedItem?.id?.let { id -> c.items.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let(c::setFocus) }
+                // Same row if it's still there; otherwise (e.g. just hidden) whatever took its place.
+                val same = prev.focusedItem?.id?.let { id -> c.items.indexOfFirst { it.id == id } } ?: -1
+                c.setFocus(if (same >= 0) same else minOf(prev.focus, c.items.size - 1))
             }
         }
         model = newModel
@@ -154,6 +159,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val k = if (shownValid) 1f - exp(-dt / COLOR_TIME) else 1f
         for (i in colors.indices) shown[i] += (colors[i] - shown[i]) * k
         shownValid = true
+        IconTint.of(floatArrayOf(shown[12], shown[13], shown[14]), glyphTint)
         val aspect = layout.width / layout.height
         background.draw(shown, aspect)
         wave.draw(time, aspect, 1f - 0.35f * MonthPalette.nightness(hour))
@@ -276,7 +282,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val cat = model.categories[p.category]
         val iconPx = (M.CATEGORY_ICON_FOCUSED * layout.unit).toInt().coerceAtLeast(16)
         val tex = textures.icon("glyph:${cat.glyph}:$iconPx") { GlyphPainter.render(cat.glyph, iconPx) }
-        sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade)
+        sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade * IconTint.OPACITY, glyphTint)
         if (p.focus > 0.01f) {
             val label = textures.text(cat.title, M.CATEGORY_LABEL_SIZE * layout.unit)
             sprites.draw(label.id, p.x - label.width / 2f, p.y + p.size / 2 + M.CATEGORY_LABEL_GAP * layout.unit - label.height * 0.2f,
@@ -288,12 +294,17 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private fun drawItem(model: XmbModel, p: Placement, fade: Float, lift: Float, shift: Boolean) {
         val item = model.categories[p.category].items[p.item]
         val iconPx = (M.ITEM_ICON_FOCUSED * layout.unit).toInt().coerceAtLeast(16)
-        val tex = when (val icon = icons[item.id]) {
+        val icon = icons[item.id]
+        val tex = when (icon) {
             is ItemIcon.Bitmap -> textures.icon(item.id) { icon.bitmap.copy(icon.bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false) }
             is ItemIcon.Of -> textures.icon("glyph:${icon.glyph}:$iconPx") { GlyphPainter.render(icon.glyph, iconPx) }
             null -> null
         }
-        if (tex != null) sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade)
+        // Apps keep their own colours; our glyphs are lit, tinted and translucent like the XMB's.
+        if (tex != null) {
+            if (icon is ItemIcon.Of) sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade * IconTint.OPACITY, glyphTint)
+            else sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade)
+        }
 
         val titleSize = M.ITEM_LABEL_SIZE * layout.unit
         val title = textures.text(item.title, titleSize)

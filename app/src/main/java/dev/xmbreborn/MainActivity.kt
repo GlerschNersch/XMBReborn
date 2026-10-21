@@ -153,6 +153,7 @@ class MainActivity : Activity() {
             add(OptionEntry("App Info") {
                 runCatching { launcherApps.startAppDetailsActivity(launch.component, launch.user, null, null) }
             })
+            add(OptionEntry("Hide") { prefs.setHidden(item.id, true); reload() })
             if (!isSystemApp(launch.component.packageName)) add(OptionEntry("Uninstall") { uninstall(item, launch) })
         })
         else -> null
@@ -196,6 +197,11 @@ class MainActivity : Activity() {
         XmbSources.SETTING_SOUNDS -> onOff(prefs.sounds) { on ->
             prefs.sounds = on
             sfx.enabled = on
+        }
+        XmbSources.SETTING_HIDDEN -> {
+            val hidden = sources.hiddenApps
+            if (hidden.isEmpty()) XmbOptions(listOf(OptionEntry("No hidden apps") {}))
+            else XmbOptions(hidden.map { app -> OptionEntry("Show ${app.title}") { prefs.setHidden(app.id, false); reload() } })
         }
         else -> error("Unknown setting $key")
     }

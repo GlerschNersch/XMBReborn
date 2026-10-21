@@ -33,6 +33,10 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     val icons = HashMap<String, ItemIcon>()
 
+    /** Apps left out of the bar because the user hid them, for the Hidden Apps setting. */
+    @Volatile var hiddenApps: List<XmbItem> = emptyList()
+        private set
+
     fun build(iconPx: Int): List<XmbCategory> {
         icons.clear()
         val apps = loadApps(iconPx)
@@ -66,7 +70,9 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             }
         }
         out.sortWith { a, b -> collator.compare(a.item.title, b.item.title) }
-        return out
+        val hidden = prefs.hidden
+        hiddenApps = out.filter { it.item.id in hidden }.map { it.item }
+        return out.filter { it.item.id !in hidden }
     }
 
     /** The Settings column: our Theme and Sound settings first, then shortcuts into Android's. */
@@ -79,6 +85,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             Triple(SETTING_COLOR, "Theme Color", color),
             Triple(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient)),
             Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
+            Triple(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }),
         ).map { (key, title, value) ->
             val id = "setting:$key"
             icons[id] = ItemIcon.Of(Glyph.SETTINGS)
@@ -107,6 +114,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_COLOR = "color"
         const val SETTING_AMBIENT = "ambient"
         const val SETTING_SOUNDS = "sounds"
+        const val SETTING_HIDDEN = "hidden"
     }
 
     private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {

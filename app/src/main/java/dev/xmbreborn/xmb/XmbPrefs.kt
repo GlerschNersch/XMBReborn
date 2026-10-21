@@ -15,6 +15,14 @@ class XmbPrefs(context: Context) {
         get() = p.getBoolean("ambient", true)
         set(v) = p.edit().putBoolean("ambient", v).apply()
 
+    /** Item ids of apps the user has hidden from the bar. */
+    val hidden: Set<String> get() = p.getStringSet("hidden", emptySet())!!.toSet()
+
+    fun setHidden(id: String, hide: Boolean) {
+        val now = hidden.toMutableSet().apply { if (hide) add(id) else remove(id) }
+        p.edit().putStringSet("hidden", now).apply()
+    }
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()

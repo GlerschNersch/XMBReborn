@@ -12,6 +12,7 @@ class Sprites {
     private var uRect = 0
     private var uScreen = 0
     private var uAlpha = 0
+    private var uTint = 0
     private var vao = 0
     private var screenW = 1f
     private var screenH = 1f
@@ -21,6 +22,7 @@ class Sprites {
         uRect = GLES30.glGetUniformLocation(program, "uRect")
         uScreen = GLES30.glGetUniformLocation(program, "uScreen")
         uAlpha = GLES30.glGetUniformLocation(program, "uAlpha")
+        uTint = GLES30.glGetUniformLocation(program, "uTint")
         GLES30.glUseProgram(program)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uTex"), 0)
         val ids = IntArray(1)
@@ -37,13 +39,14 @@ class Sprites {
         GLES30.glBindVertexArray(vao)
     }
 
-    /** Draws [texture] into the rectangle with top-left (x, y). */
-    fun draw(texture: Int, x: Float, y: Float, w: Float, h: Float, alpha: Float) {
+    /** Draws [texture] into the rectangle with top-left (x, y), its colour multiplied by [tint] (RGB). */
+    fun draw(texture: Int, x: Float, y: Float, w: Float, h: Float, alpha: Float, tint: FloatArray? = null) {
         if (alpha <= 0.003f || texture == 0) return
         if (x > screenW || y > screenH || x + w < 0f || y + h < 0f) return
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
         GLES30.glUniform4f(uRect, x, y, w, h)
         GLES30.glUniform1f(uAlpha, alpha)
+        if (tint != null) GLES30.glUniform3f(uTint, tint[0], tint[1], tint[2]) else GLES30.glUniform3f(uTint, 1f, 1f, 1f)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
     }
 
@@ -68,9 +71,10 @@ class Sprites {
             in vec2 vUv;
             uniform sampler2D uTex;
             uniform float uAlpha;
+            uniform vec3 uTint;
             out vec4 fragColor;
             void main() {
-                fragColor = texture(uTex, vUv) * uAlpha;
+                fragColor = texture(uTex, vUv) * vec4(uTint, 1.0) * uAlpha;
             }"""
     }
 }

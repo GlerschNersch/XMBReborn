@@ -172,3 +172,18 @@ Theme colours: the only background colours in the firmware are the 24 month grad
 choose one of those 12 months or "Original" (follow the calendar), and that's what the launcher
 offers. The setting's text table didn't decode (the RCO text section needs decompressing), so the
 option names are ours.
+
+## Wave speed and icon look (21 Oct)
+
+Wave speed, from `idle.mp4`: on columns clear of UI (x 1000/1120/1240) the ribbon's brightest
+ridge drifts about 140 px in 9 s, a mean of 15–17 px/s on the 720 px reference. Our `Wave.kt`
+centre line gives 14.5–17.9 px/s and sweeps a similar band of heights (≈300–515 vs the 320–490 seen
+in 9 s), so it already matches and is unchanged. A 9 s sample can't pin the longer periods.
+
+Icons, from `icons_full.png`: over an October-day background (115, 94, 42), the focused Settings
+icon's flat face reads (210, 199, 150) and an unfocused body (184, 170, 122) over (126, 104, 50).
+That fits a warm, background-tinted colour at ~0.68 opacity focused and ~0.4 unfocused (× the
+bar's 0.6). The edges are pillowed: a lighter top bevel, a ~30% darker lower bevel, and barely any
+drop shadow. Our glyphs bake that in (`IconLighting`: blurred-silhouette height field lit by
+ICONS.mnu's two lights). They're drawn at `IconTint.OPACITY` with a tint 30% toward the
+background's hue, which is a stand-in for the PS3's environment reflection.
