@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.UserHandle
 import android.provider.Settings
+import dev.xmbreborn.BootChime
 import java.text.Collator
 
 /** What opening an item does. */
@@ -88,6 +89,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             Triple(SETTING_COLOR, "Theme Color", color),
             Triple(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient)),
             Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
+            Triple(SETTING_CHIME, "Startup Sound", if (!BootChime.file(context).isFile) "No sound file" else onOff(prefs.chime)),
             Triple(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }),
         ).map { (key, title, value) ->
             val id = "setting:$key"
@@ -122,6 +124,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_AMBIENT = "ambient"
         const val SETTING_SOUNDS = "sounds"
         const val SETTING_HIDDEN = "hidden"
+        const val SETTING_CHIME = "chime"
     }
 
     private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {

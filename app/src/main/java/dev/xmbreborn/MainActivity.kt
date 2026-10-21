@@ -34,6 +34,7 @@ class MainActivity : Activity() {
     private lateinit var prefs: XmbPrefs
     private lateinit var sources: XmbSources
     private val ambient = Ambient()
+    private val chime by lazy { BootChime(this) }
     private val audio by lazy { getSystemService(AudioManager::class.java) }
     private var resumed = false
     /** An app was opened, so category columns need reordering when home shows again. */
@@ -78,12 +79,16 @@ class MainActivity : Activity() {
         super.onResume()
         view.onResume()
         resumed = true
+        if (prefs.chime && !otherMediaPlaying()) {
+            chime.playOncePerBoot(prefs.chimeBoot, { prefs.chimeBoot = it }) { updateAmbient() }
+        }
         updateAmbient()
         if (reorderOnResume) { reorderOnResume = false; reload() }
     }
 
     override fun onPause() {
         resumed = false
+        chime.stop()
         ambient.stop()
         view.onPause()
         super.onPause()
@@ -105,9 +110,12 @@ class MainActivity : Activity() {
      * is USAGE_GAME and our clicks sonification, so neither counts as someone else's media.
      */
     private fun updateAmbient(configs: List<AudioPlaybackConfiguration> = audio.activePlaybackConfigurations) {
-        val othersPlaying = configs.any { it.audioAttributes.usage == AudioAttributes.USAGE_MEDIA }
-        if (resumed && prefs.ambient && !othersPlaying) ambient.start() else ambient.stop()
+        // Waits for the start-up sound to finish rather than playing under it.
+        if (resumed && prefs.ambient && !otherMediaPlaying(configs) && !chime.playing) ambient.start() else ambient.stop()
     }
+
+    private fun otherMediaPlaying(configs: List<AudioPlaybackConfiguration> = audio.activePlaybackConfigurations) =
+        configs.any { it.audioAttributes.usage == AudioAttributes.USAGE_MEDIA }
 
     /** Home is already showing; back only closes the options panel. */
     @Deprecated("Launcher ignores back")
@@ -202,6 +210,8 @@ class MainActivity : Activity() {
             prefs.ambient = on
             updateAmbient()
         }
+        XmbSources.SETTING_CHIME -> if (!BootChime.file(this).isFile) XmbOptions(listOf(OptionEntry("No sound file") {}))
+            else onOff(prefs.chime) { on -> prefs.chime = on; if (!on) chime.stop() }
         XmbSources.SETTING_SOUNDS -> onOff(prefs.sounds) { on ->
             prefs.sounds = on
             sfx.enabled = on

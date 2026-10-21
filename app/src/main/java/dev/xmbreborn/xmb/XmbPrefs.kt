@@ -36,6 +36,16 @@ class XmbPrefs(context: Context) {
         p.edit().putString("recent", kept.joinToString("\n") { "${it.value} ${it.key}" }).apply()
     }
 
+    /** Play the start-up sound (if the user supplied one) at the first launch after power-on. */
+    var chime: Boolean
+        get() = p.getBoolean("chime", true)
+        set(v) = p.edit().putBoolean("chime", v).apply()
+
+    /** The device boot the start-up sound last played in. */
+    var chimeBoot: Int
+        get() = p.getInt("chimeBoot", -1)
+        set(v) = p.edit().putInt("chimeBoot", v).apply()
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()

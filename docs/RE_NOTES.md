@@ -203,3 +203,17 @@ User-supplied sounds: `Sfx` plays `files/sounds/snd_{cursor,decide,cancel,option
 app's private storage if present (16-bit PCM WAVs as `rco.py` writes them), else our synthesized
 clicks. To install your own, push them and copy them in with `adb shell run-as dev.xmbreborn`
 (in Git Bash set `MSYS_NO_PATHCONV=1` first). Nothing of Sony's is in the APK or the repo.
+
+Start-up sound: `BootChime` plays `files/sounds/coldboot.m4a` (the user's own, e.g.
+`ffmpeg -i dev_flash/vsh/resource/coldboot_stereo.ac3 -c:a aac coldboot.m4a`, a 10 s stereo
+chime) once per device boot (`Settings.Global.BOOT_COUNT`). It only counts as played after 2 s, so
+the pause that follows launch, or power-on behind the lock screen, doesn't use it up. Ambient waits
+for it to finish.
+
+Density check (landscape on the 2772×1272 phone vs `icons_full.png`, same detector, 720-high
+scale, clear area right of the list): PS3 46.9 spots per 100k px², ours 16.3 with 260 particles and
+47.3 with 750. Sizes (median 2 px) and peaks (35 vs 40) already matched.
+
+Cost (release build, phone): ~14% of one core in total (GL ~9%, ambient synth ~2%). Debug builds
+read 3–4× higher because ART limits JIT for debuggable apps, so measure release. `run-as` (used to
+copy sound files in) only works on the debug build.

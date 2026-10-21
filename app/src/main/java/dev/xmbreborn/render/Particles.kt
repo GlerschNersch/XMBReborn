@@ -126,10 +126,18 @@ class Particles {
         GLES30.glBindVertexArray(0)
     }
 
-    private fun gauss() = rnd.nextGaussian().toFloat()
+    private var seed = 0x9E3779B9.toInt()
+
+    /** Cheap near-Gaussian (sum of three uniforms, unit variance); nextGaussian is costly per frame. */
+    private fun gauss(): Float = (uniform() + uniform() + uniform() - 1.5f) * 2f
+
+    private fun uniform(): Float {
+        seed = seed xor (seed shl 13); seed = seed xor (seed ushr 17); seed = seed xor (seed shl 5)
+        return (seed ushr 8) / 16777216f
+    }
 
     private companion object {
-        const val COUNT = 260
+        const val COUNT = 750         // matches the capture's density (~47 spots per 100k px^2) on a 2.2:1 phone
         const val STRIDE = 8
         const val REF = 720f
         const val CONE = (51.87 * PI / 180).toFloat()

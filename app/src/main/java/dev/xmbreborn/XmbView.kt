@@ -60,6 +60,15 @@ class XmbView(
         isFocusableInTouchMode = true
     }
 
+    override fun surfaceCreated(holder: android.view.SurfaceHolder) {
+        super.surfaceCreated(holder)
+        // The PS3 drew the XMB at 60 fps; asking for no more lets 90-165 Hz panels drop to 60
+        // while home is showing. Motion is time-based, so nothing else changes.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching { holder.surface.setFrameRate(60f, android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT) }
+        }
+    }
+
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
         val top = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
             insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()).top.toFloat()
