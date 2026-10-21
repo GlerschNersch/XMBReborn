@@ -103,13 +103,21 @@ class XmbRenderer : GLSurfaceView.Renderer {
         lastPlacements = cats + items
     }
 
-    /** Date and time in the top-right corner, as on the PS3. Re-rendered once a minute. */
+    /** Date and time, right-aligned on a translucent bar off the top-right edge, as on the PS3. */
     private fun drawClock(cal: Calendar) {
-        val text = clockFormat.format(cal.time)
-        val tex = textures.slotText("clock", text, M.CLOCK_SIZE * layout.unit)
-        val x = layout.width - tex.width - M.CLOCK_MARGIN_X * layout.unit
-        val y = layout.height * (if (layout.portrait) M.CLOCK_Y_PORTRAIT else M.CLOCK_Y_LANDSCAPE)
-        sprites.draw(tex.id, x, y, tex.width.toFloat(), tex.height.toFloat(), 0.95f)
+        val u = layout.unit
+        val text = textures.slotText("clock", clockFormat.format(cal.time), M.CLOCK_SIZE * u)
+        val cy = layout.height * if (layout.portrait) M.CLOCK_Y_PORTRAIT else M.CLOCK_Y_LANDSCAPE
+        val barH = M.CLOCK_BAR_HEIGHT * u
+        val barX = layout.width - M.CLOCK_BAR_WIDTH * u
+        val solid = textures.icon("solid") { android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(-1) } }
+        // Premultiplied white quad: alpha alone darkens nothing, so tint by drawing a faint fill
+        // plus brighter hairlines top and bottom, which is how the PS3 bar reads over any colour.
+        sprites.draw(solid.id, barX, cy - barH / 2, layout.width - barX, barH, 0.10f)
+        sprites.draw(solid.id, barX, cy - barH / 2, layout.width - barX, maxOf(1f, u), 0.45f)
+        sprites.draw(solid.id, barX, cy + barH / 2 - maxOf(1f, u), layout.width - barX, maxOf(1f, u), 0.45f)
+        val x = layout.width - M.CLOCK_TEXT_RIGHT * u - text.width + TextureCache.padFor(M.CLOCK_SIZE * u)
+        sprites.draw(text.id, x, cy - text.height / 2f, text.width.toFloat(), text.height.toFloat(), 0.95f)
     }
 
     private val clockFormat = java.text.SimpleDateFormat(
@@ -138,8 +146,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
         }
         if (tex != null) sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha)
 
-        val textX = p.x + p.size / 2 + M.ITEM_LABEL_GAP * layout.unit
-        val title = textures.text(item.title, M.ITEM_LABEL_SIZE * layout.unit)
+        val titleSize = M.ITEM_LABEL_SIZE * layout.unit
+        val title = textures.text(item.title, titleSize)
+        val textX = layout.labelX(p.x) - TextureCache.padFor(titleSize)
         val sub = item.subtitle?.takeIf { p.focus > 0.01f }?.let { textures.text(it, M.ITEM_SUBTITLE_SIZE * layout.unit) }
         // Focused rows lift the title to make room for the subtitle under it.
         val titleY = if (sub != null) p.y - title.height * (0.5f + 0.35f * p.focus) else p.y - title.height / 2f

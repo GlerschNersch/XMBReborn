@@ -56,19 +56,25 @@ class XmbLayout(val width: Float, val height: Float) {
     }
 
     /**
-     * Row centre for a row [r] places from the focused one. Rows at or after focus hang below
-     * the bar; rows before it stack upward above the bar, crossing the bar between -1 and 0.
+     * Row centre for a row [r] places from the focused one. The focused row sits well below
+     * the bar with a wide gap after it; every other row is packed tight, those before focus
+     * stacked upward above the bar. Piecewise linear, so scrolling is continuous.
      */
     fun rowY(r: Float): Float {
-        val below = anchorY + M.ITEM_GAP_BELOW * unit
+        val focused = anchorY + M.ITEM_FOCUSED_OFFSET * unit
+        val next = focused + M.ITEM_AFTER_FOCUSED * unit
         val above = anchorY - M.ITEM_GAP_ABOVE * unit
         val step = M.ITEM_SPACING * unit
         return when {
-            r >= 0f -> below + r * step
-            r <= -1f -> above + (r + 1f) * step
-            else -> lerp(above, below, r + 1f)
+            r >= 1f -> next + (r - 1f) * step
+            r >= 0f -> lerp(focused, next, r)
+            r > -1f -> lerp(above, focused, r + 1f)
+            else -> above + (r + 1f) * step
         }
     }
+
+    /** Where every row's title starts: a fixed offset from the column centre. */
+    fun labelX(columnX: Float) = columnX + M.ITEM_LABEL_X * unit
 
     companion object {
         fun closeness(distance: Float) = max(0f, 1f - abs(distance))

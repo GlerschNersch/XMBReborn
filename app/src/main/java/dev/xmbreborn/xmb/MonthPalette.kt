@@ -1,8 +1,12 @@
 package dev.xmbreborn.xmb
 
+import kotlin.math.pow
+
 /**
  * Background colour per month, measured from the PS3's month gradients: four corners plus the
- * centre (0xRRGGBB), for day and for night. Night versions fade toward black at the bottom.
+ * centre (0xRRGGBB) as stored in the textures, for day and for night. The XMB draws these
+ * textures upside down (their first row is the screen's bottom), so at night the colour glows
+ * up from the bottom of an otherwise dark screen; [colors] applies that flip.
  */
 object MonthPalette {
     /** [month 0..11][tl, tr, bl, br, centre] */
@@ -35,29 +39,44 @@ object MonthPalette {
         intArrayOf(0x40211c, 0xbd3f2c, 0x0e0d0d, 0x121010, 0x2d1815),
     )
 
-    /**
-     * 0 = full day, 1 = full night, for an hour of day (0..24, fractional). Day 7:00-17:00,
-     * night 20:00-5:00, with a dawn ramp 5-7 and a dusk ramp 17-20.
-     */
+    // The PS3's own schedule (qgl/lines.qrc BACKGROUND.mnu): night fades into day from 00:00 to
+    // 05:10, day fades into night from 18:30 to 20:20.
+    private const val NIGHT2DAY_BEGIN = 0f
+    private const val NIGHT2DAY_END = 5.16611f
+    private const val DAY2NIGHT_BEGIN = 18.498f
+    private const val DAY2NIGHT_END = 20.3312f
+
+    // Fitted to a captured XMB frame: the night texture reaches the screen as ~0.29 * c^1.73.
+    private const val NIGHT_GAIN = 0.29f
+    private const val NIGHT_GAMMA = 1.73f
+
+    /** 0 = full day, 1 = full night, for an hour of day (0..24, fractional). */
     fun nightness(hour: Float): Float = when {
-        hour < 5f -> 1f
-        hour < 7f -> 1f - (hour - 5f) / 2f
-        hour < 17f -> 0f
-        hour < 20f -> (hour - 17f) / 3f
+        hour < NIGHT2DAY_END -> 1f - smooth((hour - NIGHT2DAY_BEGIN) / (NIGHT2DAY_END - NIGHT2DAY_BEGIN))
+        hour < DAY2NIGHT_BEGIN -> 0f
+        hour < DAY2NIGHT_END -> smooth((hour - DAY2NIGHT_BEGIN) / (DAY2NIGHT_END - DAY2NIGHT_BEGIN))
         else -> 1f
     }
 
-    /** Five colours (tl, tr, bl, br, centre) as linear-ish RGB floats, 15 values. */
+    private fun smooth(t: Float): Float {
+        val x = t.coerceIn(0f, 1f)
+        return x * x * (3f - 2f * x)
+    }
+
+    /** Screen corner -> texture corner, for the vertical flip: tl<-bl, tr<-br, bl<-tl, br<-tr. */
+    private val FLIP = intArrayOf(2, 3, 0, 1, 4)
+
+    /** Five colours (tl, tr, bl, br, centre) of the screen as RGB floats, 15 values. */
     fun colors(month: Int, hour: Float, out: FloatArray = FloatArray(15)): FloatArray {
         val m = month.coerceIn(0, 11)
         val n = nightness(hour)
         for (i in 0 until 5) {
-            val d = DAY[m][i]
-            val k = NIGHT[m][i]
+            val d = DAY[m][FLIP[i]]
+            val k = NIGHT[m][FLIP[i]]
             for (c in 0 until 3) {
                 val shift = 16 - 8 * c
                 val dv = (d shr shift and 0xff) / 255f
-                val nv = (k shr shift and 0xff) / 255f
+                val nv = NIGHT_GAIN * ((k shr shift and 0xff) / 255f).pow(NIGHT_GAMMA)
                 out[i * 3 + c] = dv + (nv - dv) * n
             }
         }

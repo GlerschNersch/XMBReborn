@@ -88,3 +88,32 @@ onScrollIn/onScrollOut/onCursorMove`.
 - Shader maths: `.vpo`/`.fpo` are compiled RSX microcode. Rebuild from the `.mnu` params and
   captured frames. If an exact formula matters, RPCS3's RSX decompiler can emit GLSL.
 - `coldboot.raf` format.
+
+## Measured layout and motion (RPCS3, 4.93, 1280×720, 2026-10-20)
+
+Getting there: boot `dev_flash/vsh/module/vsh.self` (first boot compiles ~1500 PPU modules,
+~25 min, then exits once; boot again). Initial Setup runs once. Input goes through a Keyboard pad
+profile (`re/tools/xmb_keys.ps1`, `xmb_capture.ps1`). RPCS3 sometimes draws text on white boxes
+or a white background for a few seconds after boot, then renders correctly.
+
+Static layout (`XmbMetrics.kt` holds these):
+- Bar centre y 193 (0.268 H). Focused column centre x 378 (0.295 W). Column step 135.
+- Category icons ~56 px, focused ~76. Label centre 41 below the bar centre, ~15 px text.
+- Focused row 144 below the bar, the row after it +116, then rows every 53.5. Rows above the
+  bar: nearest at bar −113, then every 53. Unfocused row icons ~38, focused ~80.
+- Titles start 78 px right of the column centre on every row (~21 px text). Subtitle ~12 px,
+  ~20 px under the title.
+- Clock: right-aligned text (right edge ~105 from the screen edge) on a translucent bar from
+  x 887 to the right edge, y 52–88.
+
+Motion: `motion.py` cross-correlates a screen strip frame to frame. Column changes are a pure
+exponential approach with no ease-in, 24% of the remaining distance per 60 Hz frame
+(0.24, 0.42, 0.56, 0.67, 0.75 …), τ ≈ 0.060 s, settled in ~0.27 s. Row changes settle in the
+same ~0.23–0.28 s. (Non-uniform row spacing smears the strip correlation, so treat that as
+the same τ.)
+
+Background: the month textures are drawn **vertically flipped** (texture row 0 = screen bottom).
+At night (20 Oct 23:57) the screen is black at the top and #371c01 at the bottom, against
+night texture #d89200, which fits ≈ 0.29·c^1.73. The schedule comes from `BACKGROUND.mnu`:
+NIGHT2DAY 0 → 5.17 h, DAY2NIGHT 18.50 → 20.33 h, NIGHT BLEND 0.5, DAYSPREAD 2.68,
+NIGHT WHIT BIAS 0.486 (the last three aren't used yet).

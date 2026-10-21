@@ -43,6 +43,11 @@ class TextureCache {
         return tex
     }
 
+    companion object {
+        /** Transparent margin around rendered text (room for its shadow), in pixels. */
+        fun padFor(sizePx: Float) = ceil(sizePx * 0.3f)
+    }
+
     private fun renderText(text: String, sizePx: Float, bold: Boolean): Bitmap {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -50,7 +55,7 @@ class TextureCache {
             typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
             setShadowLayer(sizePx * 0.12f, 0f, sizePx * 0.06f, Color.argb(150, 0, 0, 0))
         }
-        val pad = ceil(sizePx * 0.3f).toInt()
+        val pad = padFor(sizePx).toInt()
         val fm = paint.fontMetrics
         val w = ceil(paint.measureText(text)).toInt() + pad * 2
         val h = ceil(fm.descent - fm.ascent).toInt() + pad * 2

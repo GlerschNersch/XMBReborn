@@ -74,9 +74,17 @@ class XmbModelTest {
         // Focused row hangs just below the bar; earlier rows sit above it.
         assertTrue(layout.rowY(0f) > layout.anchorY)
         assertTrue(layout.rowY(-1f) < layout.anchorY)
-        // Continuous through the crossing, so scrolling never jumps.
-        assertEquals(layout.rowY(-0.999f), layout.rowY(-1f), 0.5f)
-        assertEquals(layout.rowY(-0.001f), layout.rowY(0f), 0.5f)
+        // Continuous through every segment boundary, so scrolling never jumps.
+        for (edge in listOf(-1f, 0f, 1f)) {
+            assertEquals(layout.rowY(edge - 0.001f), layout.rowY(edge + 0.001f), 0.5f)
+        }
+        // Measured XMB geometry at 1280x720: focused row 144 below the bar, next one 116
+        // further, then 53.5 apart; the nearest row above sits 113 over the bar.
+        assertEquals(layout.anchorY + 144f, layout.rowY(0f), 0.01f)
+        assertEquals(layout.anchorY + 260f, layout.rowY(1f), 0.01f)
+        assertEquals(layout.anchorY + 313.5f, layout.rowY(2f), 0.01f)
+        assertEquals(layout.anchorY - 113f, layout.rowY(-1f), 0.01f)
+        assertEquals(layout.anchorY - 166.5f, layout.rowY(-2f), 0.01f)
     }
 
     @Test fun onlyNearbyColumnsShowRows() {
@@ -98,10 +106,19 @@ class XmbModelTest {
         }
     }
 
-    @Test fun nightnessRampsAtDawnAndDusk() {
-        assertEquals(1f, MonthPalette.nightness(2f), 0f)
-        assertEquals(0.5f, MonthPalette.nightness(6f), 0.001f)
+    @Test fun nightnessFollowsThePs3Schedule() {
+        assertEquals(1f, MonthPalette.nightness(0f), 0f)
+        assertEquals(0.5f, MonthPalette.nightness(5.16611f / 2), 0.001f)
         assertEquals(0f, MonthPalette.nightness(12f), 0f)
-        assertEquals(1f, MonthPalette.nightness(21f), 0f)
+        assertEquals(0.5f, MonthPalette.nightness((18.498f + 20.3312f) / 2), 0.001f)
+        assertEquals(1f, MonthPalette.nightness(23.9f), 0f)
+    }
+
+    @Test fun octoberNightMatchesTheCapturedFrame() {
+        // Real XMB, 20 Oct 23:57: black at the top, dark brown (#371c01) at the bottom.
+        val c = MonthPalette.colors(9, 23.95f)
+        assertTrue("top-left dark", c[0] < 0.02f && c[1] < 0.02f)
+        assertEquals(0x37 / 255f, c[6], 0.04f)  // bottom-left red
+        assertEquals(0x1c / 255f, c[7], 0.04f)  // bottom-left green
     }
 }
