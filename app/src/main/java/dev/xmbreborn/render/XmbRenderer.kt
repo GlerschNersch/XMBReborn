@@ -47,6 +47,12 @@ class XmbRenderer : GLSurfaceView.Renderer {
     /** Snapshot of where things were drawn last frame, for touch hit-testing on the UI thread. */
     @Volatile var lastPlacements: List<Placement> = emptyList()
         private set
+    /** Where the bar is this frame, for views laid over a column: its scroll (fractional column)
+     *  and the column ids in order. */
+    @Volatile var barScroll = 0f
+        private set
+    @Volatile var columnIds: List<String> = emptyList()
+        private set
     @Volatile var lastLayout: XmbLayout = layout
         private set
 
@@ -129,6 +135,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
             }
         }
         model = newModel
+        columnIds = newModel.categories.map { it.id }
         icons = newIcons
         textures.clear()
         motion = XmbMotion(newModel).also { it.snap() }
@@ -242,6 +249,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         drawOptions(panelX)
         sprites.end()
         lastPlacements = cats + items
+        barScroll = motion.category
     }
 
     /** Date and time, right-aligned on a translucent bar off the top-right edge, as on the PS3. */

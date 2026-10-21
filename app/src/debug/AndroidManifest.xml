@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: the Widget Lab mock-ups, one launcher icon per option. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name=".WidgetLabActivity"
+            android:exported="false"
+            android:theme="@style/LauncherTheme" />
+        <activity-alias
+            android:name=".WidgetLabDashboard"
+            android:exported="true"
+            android:label="Widget Lab 3 · Dashboard"
+            android:targetActivity=".WidgetLabActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".WidgetLabBoard"
+            android:exported="true"
+            android:label="Widget Lab 4 · What's New"
+            android:targetActivity=".WidgetLabActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".WidgetLabNative"
+            android:exported="true"
+            android:label="Widget Lab 5 · Built-in info"
+            android:targetActivity=".WidgetLabActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+    </application>
+</manifest>
