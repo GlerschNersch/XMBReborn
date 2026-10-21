@@ -106,8 +106,8 @@ class MainActivity : Activity() {
     /**
      * Ambient plays only while home is showing, it's switched on, and no other app is playing
      * media: never over the user's own music or podcast. Asked of what's actually playing, not
-     * isMusicActive, which some phones report as true in VoIP / Wi-Fi calling audio modes. Our bed
-     * is USAGE_GAME and our clicks sonification, so neither counts as someone else's media.
+     * isMusicActive, which some phones report as true in VoIP / Wi-Fi calling audio modes. Our
+     * bed, clicks and chime are all USAGE_GAME, so none of them counts as someone else's media.
      */
     private fun updateAmbient(configs: List<AudioPlaybackConfiguration> = audio.activePlaybackConfigurations) {
         // Waits for the start-up sound to finish rather than playing under it.

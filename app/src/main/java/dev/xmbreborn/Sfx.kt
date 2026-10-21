@@ -70,8 +70,11 @@ class Sfx(ownSound: (String) -> File? = { null }) {
 
     private fun track(pcm: ShortArray, rate: Int = RATE, channels: Int = 1): AudioTrack {
         val t = AudioTrack.Builder()
+            // Media volume, like the PS3 (its menu sounds come out with everything else) and like our
+            // ambient bed. As system sounds they'd be silenced whenever the phone is on vibrate;
+            // the Interface Sounds setting turns them off instead.
             .setAudioAttributes(AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_GAME)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
             .setAudioFormat(AudioFormat.Builder()
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
