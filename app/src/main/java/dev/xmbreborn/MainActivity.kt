@@ -42,6 +42,8 @@ class MainActivity : Activity() {
     @Volatile private var gameBackgrounds: Map<String, Ps3Library.Pic1> = emptyMap()
     /** An app was opened, so category columns need reordering when home shows again. */
     private var reorderOnResume = false
+    /** When the bar was last rebuilt (elapsedRealtime), so returning home can pick up new PS3 games. */
+    @Volatile private var lastReload = 0L
 
     /** Steps the ambient bed aside whenever another app plays media, and back in when it stops. */
     private val playbackWatch = object : AudioManager.AudioPlaybackCallback() {
@@ -87,7 +89,10 @@ class MainActivity : Activity() {
             chime.playOncePerBoot(prefs.chimeBoot, { prefs.chimeBoot = it }) { updateAmbient() }
         }
         updateAmbient()
-        if (reorderOnResume) { reorderOnResume = false; reload() }
+        // Rebuild after an app was opened (recency order), or now and then while a PS3 games folder
+        // is set, since games copied into it don't announce themselves.
+        val stale = prefs.ps3Folder != null && android.os.SystemClock.elapsedRealtime() - lastReload > RESCAN_MS
+        if (reorderOnResume || stale) { reorderOnResume = false; reload() }
     }
 
     override fun onPause() {
@@ -130,6 +135,7 @@ class MainActivity : Activity() {
     private fun reload() {
         val iconPx = (XmbMetrics.ITEM_ICON_FOCUSED * minOf(resources.displayMetrics.widthPixels,
             resources.displayMetrics.heightPixels) / XmbMetrics.REF_SHORT_SIDE).toInt().coerceAtLeast(48)
+        lastReload = android.os.SystemClock.elapsedRealtime()
         loader.execute {
             val categories = runCatching { sources.build(iconPx) }
                 .onFailure { Log.e(TAG, "Loading the bar failed", it) }
@@ -302,6 +308,7 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQUEST_PS3_FOLDER = 31
+        const val RESCAN_MS = 30_000L
         const val ARMSX3_URL = "https://github.com/ARMSX2/ARMSX3/releases"
         const val TAG = "XmbReborn"
     }

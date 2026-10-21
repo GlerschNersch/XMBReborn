@@ -144,7 +144,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
 
     private fun ps3Status(): String = when {
         Ps3Library.emulator(context.packageManager) == null -> "Needs ARMSX3"
-        prefs.ps3Folder == null -> "Choose ARMSX3's export folder"
+        prefs.ps3Folder == null -> "Choose your games folder"
         else -> when (val n = lastPs3Count) {
             null -> "Folder not readable"
             1 -> "1 game"
