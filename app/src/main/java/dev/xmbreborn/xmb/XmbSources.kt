@@ -40,7 +40,10 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     fun build(iconPx: Int): List<XmbCategory> {
         icons.clear()
         val apps = loadApps(iconPx)
-        fun appsIn(vararg cats: Int) = apps.filter { it.category in cats }.map { it.item }
+        val recent = prefs.recent
+        // Category columns put what was opened last on top, like the PS3's Game column; the
+        // Apps column stays A-Z so everything also has a fixed place.
+        fun appsIn(vararg cats: Int) = byRecency(apps.filter { it.category in cats }.map { it.item }, recent)
         return listOf(
             XmbCategory("settings", "Settings", Glyph.SETTINGS, settingsItems()),
             XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn(ApplicationInfo.CATEGORY_IMAGE)),
@@ -111,6 +114,10 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     }
 
     companion object {
+        /** Most recently opened first; never-opened items keep their order after them. */
+        fun byRecency(items: List<XmbItem>, recent: Map<String, Long>): List<XmbItem> =
+            items.sortedByDescending { recent[it.id] ?: Long.MIN_VALUE }
+
         const val SETTING_COLOR = "color"
         const val SETTING_AMBIENT = "ambient"
         const val SETTING_SOUNDS = "sounds"

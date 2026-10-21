@@ -34,6 +34,7 @@ object XmbMetrics {
     const val ITEM_LABEL_X = 78f            // titles start here from the column centre, every row
     const val ITEM_LABEL_SIZE = 21f
     const val ITEM_SUBTITLE_SIZE = 12f
+    const val LABEL_EDGE_MARGIN = 16f       // ours: long labels end with an ellipsis this far from the edge
     /** How fast a column's rows fade as the bar scrolls away from it (1/columns). Measured: the
      *  old and new lists cross-fade linearly over the whole move, opacity = 1 - progress. */
     const val ROW_FADE_RATE = 1f

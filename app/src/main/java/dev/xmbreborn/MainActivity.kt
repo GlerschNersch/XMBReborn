@@ -36,6 +36,8 @@ class MainActivity : Activity() {
     private val ambient = Ambient()
     private val audio by lazy { getSystemService(AudioManager::class.java) }
     private var resumed = false
+    /** An app was opened, so category columns need reordering when home shows again. */
+    private var reorderOnResume = false
 
     /** Steps the ambient bed aside whenever another app plays media, and back in when it stops. */
     private val playbackWatch = object : AudioManager.AudioPlaybackCallback() {
@@ -56,7 +58,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
         prefs = XmbPrefs(this)
-        sfx = Sfx().apply { enabled = prefs.sounds }
+        // The user's own PS3 sounds, if they've copied them here (see docs/RE_NOTES.md).
+        sfx = Sfx(java.io.File(filesDir, "sounds")).apply { enabled = prefs.sounds }
         sources = XmbSources(this, prefs)
         view = XmbView(this, sfx, ::open, ::optionsFor)
         setContentView(view)
@@ -76,6 +79,7 @@ class MainActivity : Activity() {
         view.onResume()
         resumed = true
         updateAmbient()
+        if (reorderOnResume) { reorderOnResume = false; reload() }
     }
 
     override fun onPause() {
@@ -133,7 +137,11 @@ class MainActivity : Activity() {
     private fun open(item: XmbItem) {
         try {
             when (val launch = item.payload) {
-                is Launch.App -> launcherApps.startMainActivity(launch.component, launch.user, null, null)
+                is Launch.App -> {
+                    launcherApps.startMainActivity(launch.component, launch.user, null, null)
+                    prefs.markOpened(item.id)
+                    reorderOnResume = true
+                }
                 is Launch.Action -> startActivity(Intent(launch.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 is Launch.Setting -> view.showOptions(settingOptions(launch.key))
             }

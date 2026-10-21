@@ -23,11 +23,25 @@ class XmbPrefs(context: Context) {
         p.edit().putStringSet("hidden", now).apply()
     }
 
+    /** When each recently opened item was last opened (epoch ms), newest [RECENT_KEEP] kept. */
+    val recent: Map<String, Long>
+        get() = p.getString("recent", "")!!.lineSequence().mapNotNull { line ->
+            val cut = line.indexOf(' ')
+            val at = line.take(cut.coerceAtLeast(0)).toLongOrNull() ?: return@mapNotNull null
+            line.substring(cut + 1) to at
+        }.toMap()
+
+    fun markOpened(id: String, now: Long = System.currentTimeMillis()) {
+        val kept = (recent + (id to now)).entries.sortedByDescending { it.value }.take(RECENT_KEEP)
+        p.edit().putString("recent", kept.joinToString("\n") { "${it.value} ${it.key}" }).apply()
+    }
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()
 
     companion object {
         const val ORIGINAL = -1
+        const val RECENT_KEEP = 60
     }
 }

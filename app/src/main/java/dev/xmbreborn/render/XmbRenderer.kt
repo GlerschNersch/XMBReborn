@@ -28,6 +28,7 @@ import kotlin.math.exp
 class XmbRenderer : GLSurfaceView.Renderer {
     private val background = Background()
     private val wave = Wave()
+    private val particles = Particles()
     private val sprites = Sprites()
     private val textures = TextureCache()
     private val pending = ConcurrentLinkedQueue<(XmbRenderer) -> Unit>()
@@ -40,6 +41,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private val colors = FloatArray(15)
     private var lastNanos = 0L
     private var startNanos = 0L
+    /** First frame ever drawn, for the start-up fade (once per launch, not on every return home). */
+    private var introNanos = 0L
 
     /** Snapshot of where things were drawn last frame, for touch hit-testing on the UI thread. */
     @Volatile var lastPlacements: List<Placement> = emptyList()
@@ -133,6 +136,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         background.init()
         wave.init()
+        particles.init()
         sprites.init()
         textures.clear() // old ids died with the old context
         startNanos = SystemClock.elapsedRealtimeNanos()
@@ -151,6 +155,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val dt = ((now - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
         lastNanos = now
         val time = (now - startNanos) / 1e9f
+        if (introNanos == 0L) introNanos = now
+        val intro = (now - introNanos) / 1e9f
 
         val cal = Calendar.getInstance()
         val hour = cal.get(Calendar.HOUR_OF_DAY) + cal.get(Calendar.MINUTE) / 60f
@@ -162,7 +168,10 @@ class XmbRenderer : GLSurfaceView.Renderer {
         IconTint.of(floatArrayOf(shown[12], shown[13], shown[14]), glyphTint)
         val aspect = layout.width / layout.height
         background.draw(shown, aspect)
-        wave.draw(time, aspect, 1f - 0.35f * MonthPalette.nightness(hour))
+        val waveLight = 1f - 0.35f * MonthPalette.nightness(hour)
+        wave.draw(time, aspect, waveLight)
+        particles.step(dt, time, aspect)
+        particles.draw(layout.width, layout.height, time, waveLight)
 
         val model = model ?: return
         val motion = motion ?: return
@@ -170,18 +179,20 @@ class XmbRenderer : GLSurfaceView.Renderer {
         stepOptions(dt)
 
         sprites.begin(layout.width, layout.height)
+        // Start-up: the scene rises out of black first, then the bar fades in over it.
+        val introBar = drawIntroCover(intro)
         val items = layout.items(model, motion)
         val cats = layout.categories(model, motion)
         // While options are open everything but the focused row and column dims, as on the PS3.
         // In portrait the panel overlaps the rows' labels, so they go almost out of the way.
-        val faded = 1f - (if (layout.portrait) M.OPTIONS_DIM_PORTRAIT else M.OPTIONS_DIM) * dim
+        val faded = (1f - (if (layout.portrait) M.OPTIONS_DIM_PORTRAIT else M.OPTIONS_DIM) * dim) * introBar
         val panelX = panelX()
         items.forEach { p ->
             val focusedRow = p.category == model.focus && p.item == model.focused.focus
             if (focusedRow && dim > 0.005f) drawFocusBand(p, panelX)
-            drawItem(model, p, if (focusedRow) 1f else faded, if (focusedRow) dim else 0f, shift = !layout.portrait)
+            drawItem(model, p, if (focusedRow) introBar else faded, if (focusedRow) dim else 0f, shift = !layout.portrait)
         }
-        cats.forEach { drawCategory(model, it, if (it.category == model.focus) 1f else faded) }
+        cats.forEach { drawCategory(model, it, if (it.category == model.focus) introBar else faded) }
         drawClock(cal, faded)
         drawOptions(panelX)
         sprites.end()
@@ -213,6 +224,18 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private fun solid() = textures.icon("solid") { pixel(android.graphics.Color.WHITE) }
     private fun black() = textures.icon("black") { pixel(android.graphics.Color.BLACK) }
     private fun pixel(color: Int) = android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(color) }
+
+    /**
+     * Our start-up (the PS3's cold boot is Sony's artwork and music, so this is our own): black
+     * over the background and wave lifts first; returns how far the bar has faded in (0..1).
+     */
+    private fun drawIntroCover(t: Float): Float {
+        if (t >= INTRO_BAR_END) return 1f
+        sprites.draw(black().id, 0f, 0f, layout.width, layout.height, 1f - smooth(t / INTRO_SCENE))
+        return smooth((t - INTRO_BAR_START) / (INTRO_BAR_END - INTRO_BAR_START))
+    }
+
+    private fun smooth(x: Float): Float { val c = x.coerceIn(0f, 1f); return c * c * (3f - 2f * c) }
 
     private fun stepOptions(dt: Float) {
         if (options == null) return
@@ -257,7 +280,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
             .coerceAtLeast(layout.anchorY + 14f * u)
         val size = M.OPTIONS_TEXT_SIZE * u
         o.entries.forEachIndexed { i, e ->
-            val t = textures.text(e.label, size)
+            val t = textures.text(e.label, size, maxWidth = layout.width - restX - (M.OPTIONS_TEXT_X + M.LABEL_EDGE_MARGIN) * u)
             val y = first + i * step
             val a = panel * if (i == o.focus) 1f else M.OPTIONS_UNFOCUSED
             sprites.draw(t.id, x + M.OPTIONS_TEXT_X * u - TextureCache.padFor(size), y - t.height / 2f,
@@ -307,10 +330,13 @@ class XmbRenderer : GLSurfaceView.Renderer {
         }
 
         val titleSize = M.ITEM_LABEL_SIZE * layout.unit
-        val title = textures.text(item.title, titleSize)
         val textX = layout.labelX(p.x) - TextureCache.padFor(titleSize) + if (shift) M.OPTIONS_LABEL_SHIFT * layout.unit * lift else 0f
+        // Long names stop short of the screen's edge with an ellipsis. Measured from the focused
+        // column's resting place, not this frame's x, so scrolling doesn't re-render labels.
+        val maxW = layout.width - layout.labelX(layout.anchorX) - M.LABEL_EDGE_MARGIN * layout.unit
+        val title = textures.text(item.title, titleSize, maxWidth = maxW)
         val textAlpha = p.alpha * fade * (1f - M.OPTIONS_LABEL_DIM * lift)
-        val sub = item.subtitle?.takeIf { p.focus > 0.01f }?.let { textures.text(it, M.ITEM_SUBTITLE_SIZE * layout.unit) }
+        val sub = item.subtitle?.takeIf { p.focus > 0.01f }?.let { textures.text(it, M.ITEM_SUBTITLE_SIZE * layout.unit, maxWidth = maxW) }
         // Focused rows lift the title to make room for the subtitle under it.
         val titleY = if (sub != null) p.y - title.height * (0.5f + 0.35f * p.focus) else p.y - title.height / 2f
         sprites.draw(title.id, textX, titleY, title.width.toFloat(), title.height.toFloat(), textAlpha)
@@ -320,5 +346,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private companion object {
         /** Time constant for the background easing to a newly chosen colour (ours). */
         const val COLOR_TIME = 0.25f
+        // Start-up timings (ours): scene out of black over 1.4 s, bar in from 0.9 to 1.9 s.
+        const val INTRO_SCENE = 1.4f
+        const val INTRO_BAR_START = 0.9f
+        const val INTRO_BAR_END = 1.9f
     }
 }

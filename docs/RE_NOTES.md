@@ -187,3 +187,19 @@ bar's 0.6). The edges are pillowed: a lighter top bevel, a ~30% darker lower bev
 drop shadow. Our glyphs bake that in (`IconLighting`: blurred-silhouette height field lit by
 ICONS.mnu's two lights). They're drawn at `IconTint.OPACITY` with a tint 30% toward the
 background's hue, which is a stand-in for the PS3's environment reflection.
+
+## Particles (21 Oct)
+
+From `idle.mp4` / `icons_full.png` (x 760–1280, below the clock): about 160 small bright spots in
+that region per frame (~470 per screen at the PS3's density). They're mostly 1–2 px (p90 5 px),
+peaking 34 (median) to 72 (p90) above the background, and gather around and above the ribbon,
+densest at its bright end, with almost none below. A few are large faint out-of-focus discs, and
+some carry an iridescent pink, cyan or gold tint. Drift: median 15 px/s, no net direction
+(mean vx −0.5, vy +1.6 px/s). `Particles.kt` runs 260 to that description: spawned on the wave's
+centre line in PARTICLES.mnu's 52° cone (17% sent downward), with friction, Brownian jitter, a
+slight lift and a 4–10 s life.
+
+User-supplied sounds: `Sfx` plays `files/sounds/snd_{cursor,decide,cancel,option}.wav` from the
+app's private storage if present (16-bit PCM WAVs as `rco.py` writes them), else our synthesized
+clicks. To install your own, push them and copy them in with `adb shell run-as dev.xmbreborn`
+(in Git Bash set `MSYS_NO_PATHCONV=1` first). Nothing of Sony's is in the APK or the repo.

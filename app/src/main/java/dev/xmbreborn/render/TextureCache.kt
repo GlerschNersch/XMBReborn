@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.text.TextPaint
+import android.text.TextUtils
 import dev.xmbreborn.gl.Gl
 import kotlin.math.ceil
 
@@ -19,15 +21,18 @@ class TextureCache {
 
     fun icon(key: String, make: () -> Bitmap): Tex = map.getOrPut("icon:$key") { upload(make(), mipmaps = true) }
 
-    fun text(text: String, sizePx: Float, bold: Boolean = false): Tex =
-        map.getOrPut("text:${sizePx.toInt()}:$bold:$text") { upload(renderText(text, sizePx, bold), mipmaps = false) }
+    /** A label; if it would be wider than [maxWidth] pixels (text only, not padding) it ends in an ellipsis. */
+    fun text(text: String, sizePx: Float, bold: Boolean = false, maxWidth: Float = Float.MAX_VALUE): Tex {
+        val limit = if (maxWidth == Float.MAX_VALUE) -1 else maxWidth.toInt().coerceAtLeast(1)
+        return map.getOrPut("text:${sizePx.toInt()}:$bold:$limit:$text") { upload(renderText(text, sizePx, bold, limit), mipmaps = false) }
+    }
 
     private val slots = HashMap<String, Pair<String, Tex>>()
 
     /** Text that changes over time (the clock): one texture per slot, replaced when the text changes. */
     fun slotText(slot: String, text: String, sizePx: Float): Tex {
         slots[slot]?.let { (old, tex) -> if (old == text) return tex else Gl.deleteTexture(tex.id) }
-        return upload(renderText(text, sizePx, false), mipmaps = false).also { slots[slot] = text to it }
+        return upload(renderText(text, sizePx, false, -1), mipmaps = false).also { slots[slot] = text to it }
     }
 
     fun clear() {
@@ -48,13 +53,14 @@ class TextureCache {
         fun padFor(sizePx: Float) = ceil(sizePx * 0.3f)
     }
 
-    private fun renderText(text: String, sizePx: Float, bold: Boolean): Bitmap {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private fun renderText(raw: String, sizePx: Float, bold: Boolean, maxWidth: Int): Bitmap {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             textSize = sizePx
             typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
             setShadowLayer(sizePx * 0.12f, 0f, sizePx * 0.06f, Color.argb(150, 0, 0, 0))
         }
+        val text = if (maxWidth > 0) TextUtils.ellipsize(raw, paint, maxWidth.toFloat(), TextUtils.TruncateAt.END).toString() else raw
         val pad = padFor(sizePx).toInt()
         val fm = paint.fontMetrics
         val w = ceil(paint.measureText(text)).toInt() + pad * 2
