@@ -32,6 +32,19 @@ android {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
+        // A release build plus the debug-only Widget Lab, signed like release so it installs over
+        // a phone's release install without wiping its data. For trying things out; never published.
+        create("lab") {
+            initWith(getByName("release"))
+            matchingFallbacks += "release"
+        }
+    }
+
+    sourceSets {
+        getByName("lab") {
+            java.srcDir("src/debug/java")
+            manifest.srcFile("src/debug/AndroidManifest.xml")
+        }
     }
 
     testOptions {
