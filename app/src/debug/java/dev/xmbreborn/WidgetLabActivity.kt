@@ -73,8 +73,8 @@ class WidgetLabActivity : Activity() {
                     dash.visibility = View.GONE
                     dash.postDelayed({ showDashboard(dash, true) }, 800)
                 }
-                Mode.BOARD -> root.addView(board(root.height).also { followColumn(xmb, it, "new") })
-                Mode.NATIVE -> root.addView(nativeInfo(root.height).also { followColumn(xmb, it, "now") })
+                Mode.BOARD -> root.addView(gated(xmb, board(root.height), "new"))
+                Mode.NATIVE -> root.addView(gated(xmb, nativeInfo(root.height), "now"))
             }
         }
     }
@@ -97,11 +97,14 @@ class WidgetLabActivity : Activity() {
             .withEndAction { if (!show) dash.visibility = View.GONE }.start()
     }
 
+    private fun gated(xmb: XmbView, overlay: View, columnId: String): View =
+        TouchGate(this).apply { addView(overlay); followColumn(xmb, overlay, columnId, this) }
+
     /**
      * Ties a view to one column of the bar, as the XMB does a column's list: it slides with the
      * column and fades over the move (opacity = 1 - distance), gone once another column is focused.
      */
-    private fun followColumn(xmb: XmbView, view: View, columnId: String) {
+    private fun followColumn(xmb: XmbView, view: View, columnId: String, gate: TouchGate) {
         val spacing = XmbMetrics.CATEGORY_SPACING * minOf(resources.displayMetrics.widthPixels,
             resources.displayMetrics.heightPixels) / XmbMetrics.REF_SHORT_SIDE
         val tick = object : android.view.Choreographer.FrameCallback {
@@ -109,13 +112,23 @@ class WidgetLabActivity : Activity() {
                 val index = xmb.renderer.columnIds.indexOf(columnId)
                 val d = if (index < 0) 99f else index - xmb.renderer.barScroll
                 val a = (1f - kotlin.math.abs(d) * XmbMetrics.ROW_FADE_RATE).coerceIn(0f, 1f)
+                // Slides only while it's fading; fully faded it stays put. (Parking it far off
+                // screen broke redrawing: Android skipped its content there, and moving it back
+                // didn't record it again.) Touches pass through while it's faded out.
+                val show = a > 0.01f
                 view.alpha = a
-                view.translationX = d * spacing
-                view.visibility = if (a > 0.01f) View.VISIBLE else View.INVISIBLE
+                view.translationX = if (show) d * spacing else 0f
+                gate.passThrough = !show
                 if (!isDestroyed) android.view.Choreographer.getInstance().postFrameCallback(this)
             }
         }
         android.view.Choreographer.getInstance().postFrameCallback(tick)
+    }
+
+    /** Lets touches through to the bar underneath while the overlay inside is faded out. */
+    private class TouchGate(context: android.content.Context) : FrameLayout(context) {
+        var passThrough = true
+        override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean = !passThrough && super.dispatchTouchEvent(ev)
     }
 
     override fun onStart() { super.onStart(); host.startListening() }
