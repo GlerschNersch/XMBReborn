@@ -249,7 +249,7 @@ class WidgetTrays(
                     putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp)
                 })
             }
-            card(name, Scaled(activity, dp(wDp), dp(hDp)).apply { addView(view) }) { showMenu(column, id, name) }
+            card(name, Scaled(activity, dp(wDp), dp(hDp)).apply { addView(view) }, column, id) { showMenu(column, id, name) }
         }
         val grid = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -271,16 +271,129 @@ class WidgetTrays(
     /** A widget in a dark glass card with a gold hairline; long-press the title row to remove it. */
     /**
      * A widget straight on the XMB background (no card: widgets bring their own), under a small,
-     * faint name. Long-press the name to arrange it; the widget itself keeps all its own touches.
+     * faint name. Press and hold anywhere on it, then drag, to move it; hold without moving to
+     * arrange it. Taps and swipes inside the widget still go to the widget.
      */
-    private fun card(title: CharSequence, content: View, onArrange: () -> Unit) = LinearLayout(activity).apply {
-        orientation = LinearLayout.VERTICAL
-        addView(text(title.toString(), 11f, alpha = 0.65f).apply {
-            setPadding(dp(4), dp(6), dp(4), dp(6)) // a comfortable target despite the small text
-            contentDescription = "$title. Long-press to arrange"
-            setOnLongClickListener { onArrange(); true }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    private fun card(title: CharSequence, content: View, column: String, id: Int, onArrange: () -> Unit) =
+        DragCard(activity, column, id, onArrange).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text(title.toString(), 11f, alpha = 0.65f).apply {
+                setPadding(dp(4), dp(6), dp(4), dp(6))
+                contentDescription = "$title. Press and hold to move or arrange"
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+
+    /**
+     * Watches every touch on a widget without getting in its way: a press held still for the
+     * long-press time picks the widget up (the widget gets a cancel), and from then on the finger
+     * drags it. Let go without having moved and the arrange menu opens instead.
+     */
+    private inner class DragCard(context: Context, val column: String, val widgetId: Int, private val onArrange: () -> Unit) :
+        LinearLayout(context) {
+        private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+        private var downX = 0f
+        private var downY = 0f
+        private var dragging = false
+        private var moved = false
+        private val pickUp = Runnable {
+            dragging = true
+            moved = false
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            // The widget had the touch until now; tell it the gesture is over.
+            val now = android.os.SystemClock.uptimeMillis()
+            MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0).also { super.dispatchTouchEvent(it); it.recycle() }
+            parent?.requestDisallowInterceptTouchEvent(true)
+            startDrag(this)
+        }
+
+        override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+            if (dragging) {
+                val dy = ev.rawY - downY
+                if (kotlin.math.hypot(ev.rawX - downX, dy) > slop) moved = true
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_MOVE -> moveDrag(this, dy)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        dragging = false
+                        endDrag(this)
+                        if (!moved && ev.actionMasked == MotionEvent.ACTION_UP) onArrange()
+                    }
+                }
+                return true
+            }
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.rawX; downY = ev.rawY
+                    postDelayed(pickUp, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                }
+                MotionEvent.ACTION_MOVE -> if (kotlin.math.hypot(ev.rawX - downX, ev.rawY - downY) > slop) removeCallbacks(pickUp)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> removeCallbacks(pickUp)
+            }
+            super.dispatchTouchEvent(ev)
+            return true // keep the gesture even over a widget's empty space, so a hold there still picks it up
+        }
+    }
+
+    // ---- dragging ---------------------------------------------------------------------------------
+
+    private var dragTarget = 0
+    private var dragFrom = 0
+
+    /** The widgets that move together with [card]: its stack in the tray. */
+    private fun stack(card: View): List<View> {
+        val col = card.parent as? ViewGroup ?: return emptyList()
+        return (0 until col.childCount).map { col.getChildAt(it) }
+    }
+
+    private fun startDrag(card: DragCard) {
+        dragFrom = stack(card).indexOf(card)
+        dragTarget = dragFrom
+        card.animate().scaleX(1.04f).scaleY(1.04f).alpha(0.9f).translationZ(dp(12).toFloat()).setDuration(120).start()
+    }
+
+    /** The lifted widget follows the finger; the others slide to open the gap where it would land. */
+    private fun moveDrag(card: DragCard, dy: Float) {
+        val views = stack(card)
+        if (views.isEmpty()) return
+        card.translationY = dy
+        val step = card.height + dp(12)
+        val centre = card.top + dy + card.height / 2f
+        var target = views.indexOfFirst { it !== card && centre < it.top + it.height / 2f }.let { if (it < 0) views.lastIndex else it }
+        if (target > dragFrom) target -= 1 // indexes of the others shift once the card leaves its slot
+        target = target.coerceIn(0, views.lastIndex)
+        if (centre > views.last().top + views.last().height / 2f) target = views.lastIndex
+        if (target == dragTarget) return
+        dragTarget = target
+        for ((j, v) in views.withIndex()) {
+            if (v === card) continue
+            val shift = when {
+                dragFrom < target && j in dragFrom + 1..target -> -step
+                target < dragFrom && j in target until dragFrom -> step
+                else -> 0
+            }
+            v.animate().translationY(shift.toFloat()).setDuration(140).start()
+        }
+    }
+
+    /** Drops it in the slot opened for it, saves the new order and rebuilds the tray. */
+    private fun endDrag(card: DragCard) {
+        val views = stack(card)
+        val from = dragFrom
+        val to = dragTarget
+        val slotY = views.getOrNull(to)?.let { (it.top - card.top).toFloat() } ?: 0f
+        card.animate().translationY(if (to == from) 0f else slotY).scaleX(1f).scaleY(1f).alpha(1f).translationZ(0f).setDuration(140)
+            .withEndAction {
+                if (to != from) {
+                    // Same stack in the tray's saved order (landscape trays interleave two stacks).
+                    val stackIds = views.map { (it as DragCard).widgetId }.toMutableList()
+                    stackIds.add(to, stackIds.removeAt(from))
+                    val all = ids(card.column)
+                    val slots = all.indices.filter { all[it] in stackIds }
+                    val reordered = all.toMutableList().also { list -> slots.forEachIndexed { k, i -> list[i] = stackIds[k] } }
+                    save(card.column, reordered)
+                }
+                refill(card.column)
+            }.start()
     }
 
     /**
