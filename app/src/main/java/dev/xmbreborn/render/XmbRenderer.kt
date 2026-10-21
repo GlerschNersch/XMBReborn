@@ -60,6 +60,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
     @Volatile var labelLimitX = Float.NaN
     /** Scale for list labels, e.g. smaller while a tray beside the list leaves them less room. */
     @Volatile var labelScale = 1f
+    /** Rows show icons only (e.g. beside a wide tray of widgets). */
+    @Volatile var labelsHidden = false
 
     /** Height of the system bar over the top of the surface, so the clock stays below it. */
     var topInset = 0f
@@ -392,6 +394,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
             else sprites.draw(tex.id, p.x - iconW / 2, p.y - iconH / 2, iconW, iconH, p.alpha * fade)
         }
 
+        if (labelsHidden) return
         val titleSize = M.ITEM_LABEL_SIZE * layout.unit * labelScale
         val labelX = if (wide) p.x + iconW / 2 + M.GAME_LABEL_GAP * layout.unit else layout.labelX(p.x)
         val textX = labelX - TextureCache.padFor(titleSize) + if (shift) M.OPTIONS_LABEL_SHIFT * layout.unit * lift else 0f

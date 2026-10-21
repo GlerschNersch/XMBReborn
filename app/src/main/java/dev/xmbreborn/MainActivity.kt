@@ -31,6 +31,7 @@ import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
     private lateinit var view: XmbView
+    private lateinit var trays: WidgetTrays
     private lateinit var sfx: Sfx
     private lateinit var prefs: XmbPrefs
     private lateinit var sources: XmbSources
@@ -69,7 +70,9 @@ class MainActivity : Activity() {
         sfx = Sfx { SoundFiles.find(this, it) }.apply { enabled = prefs.sounds }
         sources = XmbSources(this, prefs)
         view = XmbView(this, sfx, ::open, ::optionsFor)
-        setContentView(view)
+        val root = android.widget.FrameLayout(this).apply { addView(view) }
+        setContentView(root)
+        trays = WidgetTrays(this, root, view)
         view.requestFocus()
         view.renderer.post { it.themeColor = prefs.color }
         view.renderer.onWantBackground = { id -> loader.execute { loadGameBackground(id) } }
@@ -104,7 +107,11 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    override fun onStart() { super.onStart(); trays.start() }
+    override fun onStop() { trays.stop(); super.onStop() }
+
     override fun onDestroy() {
+        trays.release()
         launcherApps.unregisterCallback(appsChanged)
         audio.unregisterAudioPlaybackCallback(playbackWatch)
         loader.shutdownNow()
@@ -212,13 +219,14 @@ class MainActivity : Activity() {
     /** The options panel for a row (GL thread). */
     private fun optionsFor(item: XmbItem): XmbOptions? = when (val launch = item.payload) {
         is Launch.Setting -> settingOptions(launch.key)
-        is Launch.Action, is Launch.Ps3 -> XmbOptions(listOf(OptionEntry("Open") { open(item) }))
+        is Launch.Action, is Launch.Ps3 -> XmbOptions(listOf(OptionEntry("Open") { open(item) }, addWidgetEntry()))
         is Launch.Shortcut -> XmbOptions(listOf(
             OptionEntry("Open") { open(item) },
             OptionEntry("Remove") {
                 Shortcuts.find(launcherApps, launch.pkg, launch.id, launch.user)?.let { Shortcuts.unpin(launcherApps, it) }
                 reload()
             },
+            addWidgetEntry(),
         ))
         is Launch.App -> XmbOptions(buildList {
             add(OptionEntry("Open") { open(item) })
@@ -232,10 +240,17 @@ class MainActivity : Activity() {
             add(OptionEntry("App Info") {
                 runCatching { launcherApps.startAppDetailsActivity(launch.component, launch.user, null, null) }
             })
+            add(addWidgetEntry())
             add(OptionEntry("Hide") { prefs.setHidden(item.id, true); reload() })
             if (!isSystemApp(launch.component.packageName)) add(OptionEntry("Uninstall") { uninstall(item, launch) })
         })
         else -> null
+    }
+
+    /** Adds a widget to the tray of the column these options were opened in. */
+    private fun addWidgetEntry(): OptionEntry {
+        val column = trays.focusedColumn()
+        return OptionEntry("Add Widget Here") { column?.let(trays::add) }
     }
 
     private fun isSystemApp(pkg: String): Boolean = runCatching {
@@ -307,6 +322,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (trays.onActivityResult(requestCode, resultCode)) return
         if (requestCode != REQUEST_PS3_FOLDER || resultCode != RESULT_OK) return
         val tree = data?.data ?: return
         runCatching { contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }

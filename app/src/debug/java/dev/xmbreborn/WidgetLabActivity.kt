@@ -38,9 +38,7 @@ import java.util.concurrent.Executors
  * Not part of release builds.
  */
 class WidgetLabActivity : Activity() {
-    private enum class Mode { DASHBOARD, BOARD, NATIVE, TRAY }
-    private var tray: WidgetLabTray? = null
-    private var trays: WidgetLabTrays? = null
+    private enum class Mode { DASHBOARD, BOARD, NATIVE }
 
     private lateinit var host: AppWidgetHost
     private val manager by lazy { AppWidgetManager.getInstance(this) }
@@ -51,7 +49,6 @@ class WidgetLabActivity : Activity() {
         val mode = when (intent.component?.className?.substringAfterLast('.')) {
             "WidgetLabBoard" -> Mode.BOARD
             "WidgetLabNative" -> Mode.NATIVE
-            "WidgetLabTray" -> Mode.TRAY
             else -> Mode.DASHBOARD
         }
         host = AppWidgetHost(this, HOST_ID)
@@ -79,35 +76,6 @@ class WidgetLabActivity : Activity() {
                 }
                 Mode.BOARD -> root.addView(gated(xmb, board(root.height), "new"))
                 Mode.NATIVE -> root.addView(gated(xmb, nativeInfo(root.height), "now"))
-                Mode.TRAY -> {
-                    val t = WidgetLabTray(this, xmb).also { tray = it }
-                    val ts = WidgetLabTrays(this, root, t) { v, c -> gated(xmb, v, c) }.also { trays = it; it.start() }
-                    ts.seedIfFirstRun(mapOf(
-                        "music" to pickByKind(listOf(
-                            listOf("NowPlayingWidgetProvider", "MusicWidgetProvider", "FreeformMusicWidgetProvider"),
-                            listOf("FreeformMusicWidgetProvider", "MusicWidgetProvider"))),
-                        "settings" to pickByKind(listOf(
-                            listOf("OnePlusWidget", "OppoWeather", "DigitalAppWidgetProvider", "DigitalStackedAppWidgetProvider"),
-                            listOf("SmartspaceWidgetProvider"),
-                            listOf("MonthViewWidgetProvider", "CalendarAppWidgetProvider"))),
-                    ))
-                    // "+ Widget": adds to the tray of whichever column is focused.
-                    root.addView(label("+  Widget", 15f).apply {
-                        gravity = Gravity.CENTER
-                        background = GradientDrawable().apply {
-                            setColor(Color.argb(200, 26, 18, 6)); setStroke(dp(1), Color.rgb(242, 178, 60)); cornerRadius = dp(22).toFloat()
-                        }
-                        setPadding(dp(18), dp(10), dp(18), dp(10))
-                        setOnClickListener {
-                            val column = xmb.renderer.columnIds.getOrNull(Math.round(xmb.renderer.barScroll)) ?: return@setOnClickListener
-                            ts.add(column)
-                        }
-                    }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                        Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(18), dp(56)) })
-                    // Trays need the bar's columns, which arrive with the model.
-                    whenColumnsKnown(xmb) { ts.build(it) }
-                    limitLabels(xmb, { ts.nonEmpty() }, t.left(root.width))
-                }
             }
         }
     }
@@ -164,45 +132,13 @@ class WidgetLabActivity : Activity() {
         override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean = !passThrough && super.dispatchTouchEvent(ev)
     }
 
-    private fun whenColumnsKnown(xmb: XmbView, then: (List<String>) -> Unit) {
-        val ids = xmb.renderer.columnIds
-        if (ids.isNotEmpty()) then(ids) else window.decorView.postDelayed({ whenColumnsKnown(xmb, then) }, 100)
-    }
 
-    @Deprecated("Platform result API; this Activity has no AndroidX")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
-        trays?.onActivityResult(requestCode, resultCode)
-    }
 
-    /** While a column with a tray is focused, its list's labels end before the tray. */
-    private fun limitLabels(xmb: XmbView, columns: () -> Set<String>, limit: Float) {
-        val tick = object : android.view.Choreographer.FrameCallback {
-            var limited = false
-            override fun doFrame(frameTimeNanos: Long) {
-                val ids = xmb.renderer.columnIds
-                val focused = ids.getOrNull(Math.round(xmb.renderer.barScroll))
-                val want = focused in columns()
-                if (want != limited) {
-                    limited = want
-                    xmb.renderer.post {
-                        it.labelLimitX = if (want) limit else Float.NaN
-                        it.labelScale = if (want) 0.8f else 1f
-                    }
-                }
-                if (!isDestroyed) android.view.Choreographer.getInstance().postFrameCallback(this)
-            }
-        }
-        android.view.Choreographer.getInstance().postFrameCallback(tick)
-    }
 
     override fun onStart() { super.onStart(); host.startListening() }
     override fun onStop() { host.stopListening(); super.onStop() }
     override fun onDestroy() {
         boundIds.forEach(host::deleteAppWidgetId)
-        tray?.stop()
-        trays?.stop()
         super.onDestroy()
     }
 
@@ -218,7 +154,6 @@ class WidgetLabActivity : Activity() {
                 cats = listOf(XmbCategory("new", "What's New", Glyph.FOLDER, emptyList())) + cats
                 initial = 0
             }
-            if (mode == Mode.TRAY) initial = cats.indexOfFirst { it.id == "music" }
             if (mode == Mode.NATIVE) {
                 cats = listOf(XmbCategory("now", "Now", Glyph.MUSIC, emptyList())) + cats
                 initial = 0
@@ -239,15 +174,6 @@ class WidgetLabActivity : Activity() {
         return (ordered + (all - ordered.toSet())).take(n)
     }
 
-    /** One provider per group: the first (by class name, in preference order) installed with no set-up step. */
-    private fun pickByKind(groups: List<List<String>>): List<AppWidgetProviderInfo> {
-        val all = manager.installedProviders.filter { it.configure == null }
-        val used = HashSet<android.content.ComponentName>()
-        return groups.mapNotNull { names ->
-            names.firstNotNullOfOrNull { n -> all.firstOrNull { it.provider.className.endsWith(n) && it.provider !in used } }
-                ?.also { used += it.provider }
-        }
-    }
 
     private fun widget(info: AppWidgetProviderInfo, wDp: Int, hDp: Int): View {
         val id = host.allocateAppWidgetId()
