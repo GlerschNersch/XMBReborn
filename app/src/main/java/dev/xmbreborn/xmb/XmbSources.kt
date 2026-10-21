@@ -89,7 +89,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             Triple(SETTING_COLOR, "Theme Color", color),
             Triple(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient)),
             Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
-            Triple(SETTING_CHIME, "Startup Sound", if (!BootChime.file(context).isFile) "No sound file" else onOff(prefs.chime)),
+            Triple(SETTING_CHIME, "Startup Sound", if (BootChime.file(context) == null) "No sound file" else onOff(prefs.chime)),
             Triple(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }),
         ).map { (key, title, value) ->
             val id = "setting:$key"

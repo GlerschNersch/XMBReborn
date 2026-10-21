@@ -38,21 +38,23 @@ Requires Android 10 or newer and OpenGL ES 3.
 ## Using your own PS3 sounds (optional)
 
 The app makes its own menu clicks. If you own a PS3 firmware copy, you can have it play the
-original sounds on your own device. You'll need a **debug build** (`./gradlew assembleDebug`)
-and adb:
+original sounds and boot chime on your own phone instead. You'll need Python, ffmpeg and adb on a
+computer:
 
 ```sh
 # Writes out/sounds/snd_cursor.wav, snd_decide.wav, snd_cancel.wav, snd_option.wav (and more)
 python -I re/tools/rco.py <dev_flash>/vsh/resource/system_plugin.rco out/
-# Optional boot chime:
-ffmpeg -i <dev_flash>/vsh/resource/coldboot_stereo.ac3 -c:a aac coldboot.m4a
+# The boot chime
+ffmpeg -i <dev_flash>/vsh/resource/coldboot_stereo.ac3 -c:a aac out/sounds/coldboot.m4a
 
-adb push snd_cursor.wav /data/local/tmp/     # and the others
-adb shell run-as dev.xmbreborn mkdir -p files/sounds
-adb shell run-as dev.xmbreborn cp /data/local/tmp/snd_cursor.wav files/sounds/
+D=/sdcard/Android/data/dev.xmbreborn/files/sounds
+adb shell mkdir -p $D
+adb push out/sounds/snd_cursor.wav out/sounds/snd_decide.wav out/sounds/snd_cancel.wav          out/sounds/snd_option.wav out/sounds/coldboot.m4a $D/
+adb shell am force-stop dev.xmbreborn   # it picks them up when it next opens
 ```
 
-These files stay on your device and are never part of the app.
+(On Windows Git Bash, run `export MSYS_NO_PATHCONV=1` first.) The files stay on your phone and are
+never part of the app. Delete the folder to go back to the built-in clicks.
 
 ## Building
 
@@ -61,8 +63,9 @@ These files stay on your device and are never part of the app.
 ./gradlew testDebugUnitTest
 ```
 
-Needs JDK 17 and the Android SDK (compileSdk 36). Release builds are signed with the local debug
-key, which is fine for sideloading.
+Needs JDK 17 and the Android SDK (compileSdk 36). Release builds are signed with the key named
+in your `~/.gradle/gradle.properties` (`XMB_KEYSTORE`, `XMB_KEYSTORE_PASSWORD`, `XMB_KEY_ALIAS`,
+`XMB_KEY_PASSWORD`), or with the local debug key if those aren't set.
 
 ## How it was made
 
@@ -70,6 +73,10 @@ key, which is fine for sideloading.
 captured from the real XMB running in RPCS3, background tone curves, icon lighting, particle
 density and sound envelopes. `re/tools/` has the scripts that produced them. They read a
 firmware you supply and ship nothing from it.
+
+## Licence
+
+MIT; see [LICENSE](LICENSE). This covers this project's own code and docs only.
 
 ## Disclaimer
 

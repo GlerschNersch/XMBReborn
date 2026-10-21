@@ -9,13 +9,13 @@ import kotlin.math.exp
 import kotlin.math.sin
 
 /**
- * UI clicks. If the user has put their own PS3 sound files (extracted from their firmware with
- * re/tools/rco.py) in [ownSounds], those play; nothing of Sony's ships in the app. Otherwise we
+ * UI clicks. If the user has supplied their own PS3 sound files (extracted from their firmware
+ * with re/tools/rco.py; [ownSound] finds one by name), those play; nothing of Sony's ships in the app. Otherwise we
  * synthesize our own, shaped after the PS3's (docs/RE_NOTES.md): one 40 ms click for cursor,
  * decide and options, centred near 6.8 kHz with nearly all its energy in the first 4 ms;
  * cancel is the same click a little lower and quieter.
  */
-class Sfx(ownSounds: File? = null) {
+class Sfx(ownSound: (String) -> File? = { null }) {
     enum class Kind(val file: String) {
         CURSOR("snd_cursor.wav"), DECIDE("snd_decide.wav"), CANCEL("snd_cancel.wav"), OPTION("snd_option.wav")
     }
@@ -24,7 +24,7 @@ class Sfx(ownSounds: File? = null) {
     val fromFiles = mutableSetOf<Kind>()
 
     private val tracks = Kind.entries.associateWith { kind ->
-        ownSounds?.let { load(File(it, kind.file)) }?.also { fromFiles += kind } ?: when (kind) {
+        ownSound(kind.file)?.let(::load)?.also { fromFiles += kind } ?: when (kind) {
             Kind.CURSOR, Kind.DECIDE, Kind.OPTION -> track(click(6840.0, upper = 1.30, lower = 0.712, peak = 0.16))
             Kind.CANCEL -> track(click(6450.0, upper = 1.30, lower = 0.0, peak = 0.08))
         }

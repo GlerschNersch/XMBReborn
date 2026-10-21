@@ -10,7 +10,7 @@ import java.io.File
 
 /**
  * The start-up sound, played once per power-on like the PS3's boot chime. Only the user's own
- * file is used (files/sounds/coldboot.m4a, e.g. converted from their firmware's
+ * file is used (coldboot.m4a in one of [SoundFiles.dirs], e.g. converted from their firmware's
  * coldboot_stereo.ac3); the app ships none. A launcher restarts whenever Android reclaims its
  * memory, so this keys on the device's boot count rather than on process start.
  */
@@ -28,9 +28,9 @@ class BootChime(private val context: Context) {
      * behind the lock screen) plays again on the next resume instead of being lost.
      */
     fun playOncePerBoot(lastBoot: Int, markPlayed: (Int) -> Unit, onDone: () -> Unit): Boolean {
-        val f = file(context)
+        val f = file(context) ?: return false
         val boot = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
-        if (!f.isFile || boot < 0 || boot == lastBoot || player != null) return false
+        if (boot < 0 || boot == lastBoot || player != null) return false
         val p = runCatching {
             MediaPlayer().apply {
                 setAudioAttributes(AudioAttributes.Builder()
@@ -58,7 +58,7 @@ class BootChime(private val context: Context) {
     }
 
     companion object {
-        fun file(context: Context) = File(File(context.filesDir, "sounds"), "coldboot.m4a")
+        fun file(context: Context): File? = SoundFiles.find(context, "coldboot.m4a")
         private const val COUNTS_AFTER_MS = 2000L
     }
 }

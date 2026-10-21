@@ -59,8 +59,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
         prefs = XmbPrefs(this)
-        // The user's own PS3 sounds, if they've copied them here (see docs/RE_NOTES.md).
-        sfx = Sfx(java.io.File(filesDir, "sounds")).apply { enabled = prefs.sounds }
+        // The user's own PS3 sounds, if they've supplied them (see README).
+        sfx = Sfx { SoundFiles.find(this, it) }.apply { enabled = prefs.sounds }
         sources = XmbSources(this, prefs)
         view = XmbView(this, sfx, ::open, ::optionsFor)
         setContentView(view)
@@ -210,7 +210,7 @@ class MainActivity : Activity() {
             prefs.ambient = on
             updateAmbient()
         }
-        XmbSources.SETTING_CHIME -> if (!BootChime.file(this).isFile) XmbOptions(listOf(OptionEntry("No sound file") {}))
+        XmbSources.SETTING_CHIME -> if (BootChime.file(this) == null) XmbOptions(listOf(OptionEntry("No sound file") {}))
             else onOff(prefs.chime) { on -> prefs.chime = on; if (!on) chime.stop() }
         XmbSources.SETTING_SOUNDS -> onOff(prefs.sounds) { on ->
             prefs.sounds = on

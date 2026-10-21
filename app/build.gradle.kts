@@ -11,14 +11,26 @@ android {
         applicationId = "dev.xmbreborn"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
+    }
+
+    // Release signing comes from ~/.gradle/gradle.properties (never the repo). Without it, release
+    // builds fall back to the debug key so anyone can still build and sideload.
+    val keystore = providers.gradleProperty("XMB_KEYSTORE").orNull
+    signingConfigs {
+        if (keystore != null) create("release") {
+            storeFile = file(keystore)
+            storePassword = providers.gradleProperty("XMB_KEYSTORE_PASSWORD").get()
+            keyAlias = providers.gradleProperty("XMB_KEY_ALIAS").get()
+            keyPassword = providers.gradleProperty("XMB_KEY_PASSWORD").get()
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
