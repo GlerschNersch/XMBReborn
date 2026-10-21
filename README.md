@@ -30,7 +30,11 @@ Requires Android 10 or newer and OpenGL ES 3.
 - **Swipe sideways** to change category and **up and down** to move through a list. Tap a row to
   focus it, then tap it again to open it. D-pads and game controllers work too: Ⓐ opens, Ⓑ goes
   back, and Ⓨ/Menu opens options.
-- **Long-press** a row (or press Ⓨ/Menu) for its options: Open, App Info, Hide, Uninstall.
+- **Long-press** a row (or press Ⓨ/Menu) for its options: Open, the app's own shortcuts (like
+  "New tab"), App Info, Add Widget Here, Hide, Uninstall.
+- **Home** while you're already home glides back to the top of the Apps column.
+- **"Add to Home screen"** from other apps (Chrome, Maps…) puts the shortcut in a **Shortcuts**
+  column.
 - **Settings** column:
   - **Theme Color:** Original follows the month, or pick one of the 12 month colours. The
     background previews each colour as you scroll.
@@ -42,6 +46,18 @@ Requires Android 10 or newer and OpenGL ES 3.
   - Shortcuts into Android's own settings.
 - Apps are grouped by the category the developer gave them (Photo, Music, Video, Game, Network),
   most recently opened first. **Apps** lists everything A–Z.
+
+## Widgets
+
+Every category can hold real Android widgets in a tray beside its list. The tray slides and fades
+with its category, the way the lists do.
+
+- **Add:** tap the round **+** at the bottom right (or choose **Add Widget Here** in a row's
+  options). This opens Android's widget list, plus the widget's own set-up screen if it has one.
+- **Move:** press and hold a widget until it lifts, then drag it up or down.
+- **Arrange:** press and hold without moving to make it **Bigger** or **Smaller**, give the
+  category a **Wider Tray** (its list then shows icons only), or **Remove** it.
+- Swiping sideways over a widget still changes category; taps and scrolling go to the widget.
 
 ## Playing PS3 games (optional, with ARMSX3)
 
