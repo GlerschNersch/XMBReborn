@@ -8,6 +8,14 @@ It's a clean-room recreation. The layout, motion timing, colours, lighting and s
 measured from the real interface, and everything in the app was written from those measurements.
 **No Sony code, artwork, fonts or sounds are included.**
 
+<p align="center">
+  <img src="docs/screenshots/landscape.png" width="62%" alt="The bar in landscape: categories across, the Settings column down">
+  <img src="docs/screenshots/portrait.png" width="22%" alt="The bar in portrait">
+</p>
+<p align="center">
+  <img src="docs/screenshots/theme-color.png" width="62%" alt="The options panel choosing a theme colour, previewed live">
+</p>
+
 ## Install
 
 1. Download `XMBReborn-<version>.apk` from [Releases](../../releases).
