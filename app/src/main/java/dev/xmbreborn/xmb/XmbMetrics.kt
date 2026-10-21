@@ -44,6 +44,7 @@ object XmbMetrics {
     const val CLOCK_TEXT_RIGHT = 105f       // text's right edge, measured from the screen's right
     const val CLOCK_Y_LANDSCAPE = 70f / 720f
     const val CLOCK_Y_PORTRAIT = 0.05f
+    const val CLOCK_INSET_GAP = 8f          // ours: space kept between the status bar and the clock bar
 
     // Motion: exponential approach, 24% of the remaining distance per 60 Hz frame
     // (measured: 0.24, 0.42, 0.56, 0.67, 0.75 ...), i.e. a 60 ms time constant.

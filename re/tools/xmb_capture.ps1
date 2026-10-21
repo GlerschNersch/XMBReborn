@@ -27,6 +27,8 @@ $proc = Get-Process rpcs3 | Where-Object MainWindowTitle -like '*vsh*' | Select-
 if (-not $proc) { throw 'RPCS3 is not running vsh.self' }
 $h = $proc.MainWindowHandle
 [Win]::ShowWindow($h, 9) | Out-Null
+# Windows only hands the foreground to a background process right after a key event.
+[Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero); [Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
 [Win]::SetForegroundWindow($h) | Out-Null
 Start-Sleep -Milliseconds 300
 

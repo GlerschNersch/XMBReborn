@@ -3,9 +3,11 @@ package dev.xmbreborn
 import android.annotation.SuppressLint
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.os.Build
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.view.WindowInsets
 import dev.xmbreborn.render.XmbRenderer
 import dev.xmbreborn.xmb.XmbItem
 import dev.xmbreborn.xmb.XmbMetrics as M
@@ -38,6 +40,14 @@ class XmbView(
         renderMode = RENDERMODE_CONTINUOUSLY
         isFocusable = true
         isFocusableInTouchMode = true
+    }
+
+    override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        val top = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()).top.toFloat()
+        else @Suppress("DEPRECATION") insets.systemWindowInsetTop.toFloat()
+        renderer.post { it.topInset = top }
+        return super.onApplyWindowInsets(insets)
     }
 
     /** Moves focus on the GL thread and plays the tick if anything actually moved. */

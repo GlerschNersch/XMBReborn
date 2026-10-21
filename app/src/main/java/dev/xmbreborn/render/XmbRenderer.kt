@@ -42,6 +42,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
     @Volatile var lastLayout: XmbLayout = layout
         private set
 
+    /** Height of the system bar over the top of the surface, so the clock stays below it. */
+    var topInset = 0f
+
     fun post(change: (XmbRenderer) -> Unit) { pending.add(change) }
 
     /** Installs a freshly built bar (GL thread). Keeps the previous focus where ids still match. */
@@ -107,8 +110,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private fun drawClock(cal: Calendar) {
         val u = layout.unit
         val text = textures.slotText("clock", clockFormat.format(cal.time), M.CLOCK_SIZE * u)
-        val cy = layout.height * if (layout.portrait) M.CLOCK_Y_PORTRAIT else M.CLOCK_Y_LANDSCAPE
         val barH = M.CLOCK_BAR_HEIGHT * u
+        val cy = maxOf(layout.height * if (layout.portrait) M.CLOCK_Y_PORTRAIT else M.CLOCK_Y_LANDSCAPE,
+            topInset + barH / 2 + M.CLOCK_INSET_GAP * u)
         val barX = layout.width - M.CLOCK_BAR_WIDTH * u
         val solid = textures.icon("solid") { android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(-1) } }
         // Premultiplied white quad: alpha alone darkens nothing, so tint by drawing a faint fill
