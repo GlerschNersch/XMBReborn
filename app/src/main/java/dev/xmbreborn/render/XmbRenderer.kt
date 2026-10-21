@@ -98,9 +98,23 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val cats = layout.categories(model, motion)
         items.forEach { drawItem(model, it) }
         cats.forEach { drawCategory(model, it) }
+        drawClock(cal)
         sprites.end()
         lastPlacements = cats + items
     }
+
+    /** Date and time in the top-right corner, as on the PS3. Re-rendered once a minute. */
+    private fun drawClock(cal: Calendar) {
+        val text = clockFormat.format(cal.time)
+        val tex = textures.slotText("clock", text, M.CLOCK_SIZE * layout.unit)
+        val x = layout.width - tex.width - M.CLOCK_MARGIN_X * layout.unit
+        val y = layout.height * (if (layout.portrait) M.CLOCK_Y_PORTRAIT else M.CLOCK_Y_LANDSCAPE)
+        sprites.draw(tex.id, x, y, tex.width.toFloat(), tex.height.toFloat(), 0.95f)
+    }
+
+    private val clockFormat = java.text.SimpleDateFormat(
+        android.text.format.DateFormat.getBestDateTimePattern(java.util.Locale.getDefault(), "dMjmm"),
+        java.util.Locale.getDefault())
 
     private fun drawCategory(model: XmbModel, p: Placement) {
         val cat = model.categories[p.category]

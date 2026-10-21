@@ -22,7 +22,17 @@ class TextureCache {
     fun text(text: String, sizePx: Float, bold: Boolean = false): Tex =
         map.getOrPut("text:${sizePx.toInt()}:$bold:$text") { upload(renderText(text, sizePx, bold), mipmaps = false) }
 
+    private val slots = HashMap<String, Pair<String, Tex>>()
+
+    /** Text that changes over time (the clock): one texture per slot, replaced when the text changes. */
+    fun slotText(slot: String, text: String, sizePx: Float): Tex {
+        slots[slot]?.let { (old, tex) -> if (old == text) return tex else Gl.deleteTexture(tex.id) }
+        return upload(renderText(text, sizePx, false), mipmaps = false).also { slots[slot] = text to it }
+    }
+
     fun clear() {
+        slots.values.forEach { Gl.deleteTexture(it.second.id) }
+        slots.clear()
         map.values.forEach { Gl.deleteTexture(it.id) }
         map.clear()
     }

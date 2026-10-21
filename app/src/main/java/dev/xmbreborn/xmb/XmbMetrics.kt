@@ -34,6 +34,12 @@ object XmbMetrics {
     /** How fast a column's rows fade as the bar scrolls away from it (1/columns). */
     const val ROW_FADE_RATE = 2.5f
 
+    // Clock, top right.
+    const val CLOCK_SIZE = 22f
+    const val CLOCK_MARGIN_X = 48f
+    const val CLOCK_Y_LANDSCAPE = 0.07f
+    const val CLOCK_Y_PORTRAIT = 0.045f
+
     // Motion: exponential approach time constant (s). ~4 constants to settle.
     const val FOCUS_TIME_CONSTANT = 0.055f
 }
