@@ -105,6 +105,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
             Triple(SETTING_PS3, "PS3 Games", ps3Status()),
             Triple(SETTING_CHIME, "Startup Sound", if (BootChime.file(context) == null) "No sound file" else onOff(prefs.chime)),
+            Triple(SETTING_WIDGET_BUTTON, "Widget Button", onOff(prefs.widgetButton)),
             Triple(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }),
         ).map { (key, title, value) ->
             val id = "setting:$key"
@@ -182,6 +183,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_HIDDEN = "hidden"
         const val SETTING_CHIME = "chime"
         const val SETTING_PS3 = "ps3"
+        const val SETTING_WIDGET_BUTTON = "widgetButton"
     }
 
     private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {

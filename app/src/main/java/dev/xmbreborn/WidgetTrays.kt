@@ -36,6 +36,8 @@ class WidgetTrays(
     private val activity: Activity,
     private val root: FrameLayout,
     private val xmb: XmbView,
+    /** Whether the "+" button shows (Settings, Widget Button); Add Widget Here in options always works. */
+    private val showButton: () -> Boolean = { true },
 ) {
     private val host = AppWidgetHost(activity, HOST_ID)
     private val manager = AppWidgetManager.getInstance(activity)
@@ -95,6 +97,7 @@ class WidgetTrays(
         optionsAlpha += (optionsGoal - optionsAlpha) * 0.35f
         button.alpha = optionsAlpha
         button.isEnabled = optionsAlpha > 0.5f
+        button.visibility = if (showButton()) View.VISIBLE else View.GONE
         for ((column, holder) in holders) {
             val index = ids.indexOf(column)
             val d = if (index < 0) 99f else index - xmb.renderer.barScroll
@@ -260,6 +263,10 @@ class WidgetTrays(
     }
 
     private fun wide(column: String) = prefs.getBoolean("wide:$column", false)
+
+    /** Which stack a widget sits in when the tray has several (landscape); alternating until moved. */
+    private fun stackOf(id: Int, index: Int, stacks: Int) =
+        if (stacks <= 1) 0 else prefs.getInt("stack:$id", index % stacks).coerceIn(0, stacks - 1)
     private fun size(id: Int) = prefs.getInt("size:$id", 1).coerceIn(0, SIZES.lastIndex)
 
     /** Rebuilds [column]'s cards from what's saved. Portrait: one column under the bar; landscape:
@@ -286,14 +293,14 @@ class WidgetTrays(
                     putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp)
                 })
             }
-            card(name, Scaled(activity, dp(wDp), dp(hDp)).apply { addView(view) }, column, id) { showMenu(column, id, name) }
+            id to card(name, Scaled(activity, dp(wDp), dp(hDp)).apply { addView(view) }, column, id) { showMenu(column, id, name) }
         }
         val grid = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             for (c in 0 until columns) {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    cards.filterIndexed { i, _ -> i % columns == c }.forEach {
+                    cards.filterIndexed { i, (id, _) -> stackOf(id, i, columns) == c }.forEach { (_, it) ->
                         addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
                     }
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { if (c > 0) leftMargin = dp(12) })
@@ -305,7 +312,6 @@ class WidgetTrays(
         })
     }
 
-    /** A widget in a dark glass card with a gold hairline; long-press the title row to remove it. */
     /**
      * A widget straight on the XMB background (no card: widgets bring their own), under a small,
      * faint name. Press and hold anywhere on it, then drag, to move it; hold without moving to
@@ -344,15 +350,19 @@ class WidgetTrays(
             startDrag(this)
         }
 
+        /** Ends a drag that's been taken over (the widget moved to another category). */
+        fun abandon() { dragging = false }
+
         override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
             if (dragging) {
+                val dx = ev.rawX - downX
                 val dy = ev.rawY - downY
-                if (kotlin.math.hypot(ev.rawX - downX, dy) > slop) moved = true
+                if (kotlin.math.hypot(dx, dy) > slop) moved = true
                 when (ev.actionMasked) {
-                    MotionEvent.ACTION_MOVE -> moveDrag(this, dy)
+                    MotionEvent.ACTION_MOVE -> moveDrag(this, dx, dy, ev.rawX)
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         dragging = false
-                        endDrag(this)
+                        endDrag(this, ev.rawX, ev.rawY)
                         if (!moved && ev.actionMasked == MotionEvent.ACTION_UP) onArrange()
                     }
                 }
@@ -375,6 +385,34 @@ class WidgetTrays(
 
     private var dragTarget = 0
     private var dragFrom = 0
+    private var edgeSince = 0L
+
+    /**
+     * Held at the screen's left or right edge for a moment, a dragged widget moves to the
+     * neighbouring category: it's added to the end of that tray and the bar follows. True if it moved.
+     */
+    private fun edgeDwell(card: DragCard, rawX: Float): Boolean {
+        val dir = when {
+            rawX < root.width * EDGE -> -1
+            rawX > root.width * (1f - EDGE) -> 1
+            else -> { edgeSince = 0L; return false }
+        }
+        val now = android.os.SystemClock.uptimeMillis()
+        if (edgeSince == 0L) { edgeSince = now; return false }
+        if (now - edgeSince < EDGE_DWELL_MS) return false
+        edgeSince = 0L
+        val columns = xmb.renderer.columnIds
+        val target = columns.getOrNull(columns.indexOf(card.column) + dir) ?: return false
+        card.abandon()
+        card.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+        save(card.column, ids(card.column) - card.widgetId)
+        save(target, ids(target) + card.widgetId)
+        prefs.edit().remove("stack:${card.widgetId}").apply()
+        xmb.renderer.post { it.model?.moveCategory(dir) }
+        // Rebuild once this touch event has finished with the card.
+        root.post { refill(card.column); refill(target) }
+        return true
+    }
 
     /** The widgets that move together with [card]: its stack in the tray. */
     private fun stack(card: View): List<View> {
@@ -389,10 +427,13 @@ class WidgetTrays(
     }
 
     /** The lifted widget follows the finger; the others slide to open the gap where it would land. */
-    private fun moveDrag(card: DragCard, dy: Float) {
+    private fun moveDrag(card: DragCard, dx: Float, dy: Float, rawX: Float) {
         val views = stack(card)
         if (views.isEmpty()) return
         card.translationY = dy
+        // Free sideways too where there's another stack to drop into (landscape).
+        card.translationX = if (landscape) dx else 0f
+        if (edgeDwell(card, rawX)) return
         val step = card.height + dp(12)
         val centre = card.top + dy + card.height / 2f
         var target = views.indexOfFirst { it !== card && centre < it.top + it.height / 2f }.let { if (it < 0) views.lastIndex else it }
@@ -413,7 +454,9 @@ class WidgetTrays(
     }
 
     /** Drops it in the slot opened for it, saves the new order and rebuilds the tray. */
-    private fun endDrag(card: DragCard) {
+    private fun endDrag(card: DragCard, rawX: Float, rawY: Float) {
+        edgeSince = 0L
+        if (landscape && dropOnOtherStack(card, rawX, rawY)) return
         val views = stack(card)
         val from = dragFrom
         val to = dragTarget
@@ -431,6 +474,30 @@ class WidgetTrays(
                 }
                 refill(card.column)
             }.start()
+    }
+
+    /**
+     * Landscape trays have two stacks: let go over the other one and the widget joins it, at the
+     * slot under the finger. True if that happened.
+     */
+    private fun dropOnOtherStack(card: DragCard, rawX: Float, rawY: Float): Boolean {
+        val own = card.parent as? ViewGroup ?: return false
+        val grid = own.parent as? ViewGroup ?: return false
+        val loc = IntArray(2)
+        val stacks = (0 until grid.childCount).map { grid.getChildAt(it) as ViewGroup }
+        val target = stacks.indexOfFirst { st -> st.getLocationOnScreen(loc); rawX >= loc[0] && rawX < loc[0] + st.width }
+        if (target < 0 || stacks[target] === own) return false
+        val others = (0 until stacks[target].childCount).map { stacks[target].getChildAt(it) as DragCard }
+        val at = others.indexOfFirst { o -> o.getLocationOnScreen(loc); rawY < loc[1] + o.height / 2f }.let { if (it < 0) others.size else it }
+        val all = ids(card.column).toMutableList().apply { remove(card.widgetId) }
+        val anchor = others.getOrNull(at)?.widgetId
+        val insertAt = if (anchor != null) all.indexOf(anchor) else others.lastOrNull()?.let { all.indexOf(it.widgetId) + 1 } ?: all.size
+        all.add(insertAt.coerceIn(0, all.size), card.widgetId)
+        prefs.edit().putInt("stack:${card.widgetId}", target).apply()
+        save(card.column, all)
+        card.animate().cancel()
+        refill(card.column)
+        return true
     }
 
     /**
@@ -479,6 +546,10 @@ class WidgetTrays(
         const val LIST_SCALE = 0.8f
         /** How much more sideways than vertical a swipe over a widget must be to go to the bar. */
         const val SIDEWAYS = 1.3f
+        /** A dragged widget held this close to a side edge (fraction of the width)... */
+        const val EDGE = 0.07f
+        /** ...for this long moves to the neighbouring category. */
+        const val EDGE_DWELL_MS = 450L
         const val WIDE_LEFT = 0.30f
         const val WIDE_LEFT_LANDSCAPE = 0.28f
         /** Card heights for Small / Medium / Large, relative to the widget's own size. */

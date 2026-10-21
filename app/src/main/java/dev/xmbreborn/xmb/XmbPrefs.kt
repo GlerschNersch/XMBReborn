@@ -51,6 +51,11 @@ class XmbPrefs(context: Context) {
         get() = p.getString("ps3Folder", null)
         set(v) = p.edit().putString("ps3Folder", v).apply()
 
+    /** Show the floating "+" for adding widgets (adding from a row's options always works). */
+    var widgetButton: Boolean
+        get() = p.getBoolean("widgetButton", true)
+        set(v) = p.edit().putBoolean("widgetButton", v).apply()
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()

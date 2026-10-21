@@ -72,7 +72,7 @@ class MainActivity : Activity() {
         view = XmbView(this, sfx, ::open, ::optionsFor)
         val root = android.widget.FrameLayout(this).apply { addView(view) }
         setContentView(root)
-        trays = WidgetTrays(this, root, view)
+        trays = WidgetTrays(this, root, view) { prefs.widgetButton }
         view.requestFocus()
         view.renderer.post { it.themeColor = prefs.color }
         view.renderer.onWantBackground = { id -> loader.execute { loadGameBackground(id) } }
@@ -295,6 +295,7 @@ class MainActivity : Activity() {
         })
         XmbSources.SETTING_CHIME -> if (BootChime.file(this) == null) XmbOptions(listOf(OptionEntry("No sound file") {}))
             else onOff(prefs.chime) { on -> prefs.chime = on; if (!on) chime.stop() }
+        XmbSources.SETTING_WIDGET_BUTTON -> onOff(prefs.widgetButton) { on -> prefs.widgetButton = on }
         XmbSources.SETTING_SOUNDS -> onOff(prefs.sounds) { on ->
             prefs.sounds = on
             sfx.enabled = on

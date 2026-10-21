@@ -42,6 +42,7 @@ Requires Android 10 or newer and OpenGL ES 3.
     another app plays media.
   - **Interface Sounds:** the menu clicks.
   - **Startup Sound:** plays once after the phone powers on, if you've supplied a sound (see below).
+  - **Widget Button:** hide the round **+** (Add Widget Here in options still works).
   - **Hidden Apps:** bring back apps you've hidden.
   - Shortcuts into Android's own settings.
 - Apps are grouped by the category the developer gave them (Photo, Music, Video, Game, Network),
@@ -54,7 +55,9 @@ with its category, the way the lists do.
 
 - **Add:** tap the round **+** at the bottom right (or choose **Add Widget Here** in a row's
   options). This opens Android's widget list, plus the widget's own set-up screen if it has one.
-- **Move:** press and hold a widget until it lifts, then drag it up or down.
+- **Move:** press and hold a widget until it lifts, then drag it up or down. In landscape, drag
+  it across to the other stack. Hold it at the left or right edge of the screen to carry it to
+  the next category.
 - **Arrange:** press and hold without moving to make it **Bigger** or **Smaller**, give the
   category a **Wider Tray** (its list then shows icons only), or **Remove** it.
 - Swiping sideways over a widget still changes category; taps and scrolling go to the widget.
