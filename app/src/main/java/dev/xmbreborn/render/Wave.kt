@@ -14,6 +14,7 @@ class Wave {
     private var uTime = 0
     private var uAspect = 0
     private var uBrightness = 0
+    private var uLayer = 0
     private var vao = 0
     private var vbo = 0
     private var ibo = 0
@@ -24,6 +25,7 @@ class Wave {
         uTime = GLES30.glGetUniformLocation(program, "uTime")
         uAspect = GLES30.glGetUniformLocation(program, "uAspect")
         uBrightness = GLES30.glGetUniformLocation(program, "uBrightness")
+        uLayer = GLES30.glGetUniformLocation(program, "uLayer")
 
         // Grid over (u across the screen, v across the sheet's width), both 0..1.
         val verts = FloatArray(COLS * ROWS * 2)
@@ -67,7 +69,11 @@ class Wave {
         GLES30.glUniform1f(uAspect, aspect)
         GLES30.glUniform1f(uBrightness, brightness)
         GLES30.glBindVertexArray(vao)
-        GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_SHORT, 0)
+        // Two sheets with different phases, like the PS3's layered ribbon.
+        for (layer in 0 until 2) {
+            GLES30.glUniform1f(uLayer, layer.toFloat())
+            GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_SHORT, 0)
+        }
         GLES30.glBindVertexArray(0)
     }
 
@@ -81,20 +87,22 @@ class Wave {
             layout(location = 0) in vec2 aGrid;
             uniform float uTime;
             uniform float uAspect;
+            uniform float uLayer;
             out float vGlow;
             out float vEdge;
+            out float vLine;
 
             vec3 surface(vec2 g) {
-                float x = mix(-1.25, 1.25, g.x);
-                float t = uTime;
+                float x = mix(-1.3, 1.3, g.x);
+                float t = uTime * (1.0 + 0.23 * uLayer) + uLayer * 11.0;
                 // Sheet width runs into the screen and twists along x.
-                float w = g.y - 0.5;
-                float twist = 0.9 * sin(x * 1.1 + t * 0.21) + 0.35 * sin(x * 2.3 - t * 0.17);
-                float y = -0.10
-                    + 0.16 * sin(x * 1.7 + t * 0.32)
-                    + 0.07 * sin(x * 3.3 - t * 0.47 + 1.3)
-                    + 0.025 * sin(x * 6.1 + t * 0.9);
-                return vec3(x, y + w * 0.32 * sin(twist), w * 0.32 * cos(twist));
+                float w = (g.y - 0.5) * (0.55 - 0.12 * uLayer);
+                float twist = 1.25 * sin(x * 1.05 + t * 0.19) + 0.5 * sin(x * 2.1 - t * 0.15 + uLayer);
+                float y = -0.08 + 0.05 * uLayer
+                    + 0.20 * sin(x * 1.6 + t * 0.28)
+                    + 0.08 * sin(x * 3.1 - t * 0.41 + 1.3)
+                    + 0.025 * sin(x * 5.7 + t * 0.8);
+                return vec3(x, y + w * sin(twist), w * cos(twist));
             }
 
             void main() {
@@ -103,10 +111,10 @@ class Wave {
                 vec3 dv = surface(aGrid + vec2(0.0, 0.02)) - p;
                 vec3 n = normalize(cross(du, dv));
                 // Fresnel: faint face-on, bright where the sheet turns edge-on to the eye.
-                float facing = abs(n.z);
-                vGlow = pow(1.0 - facing, 3.0);
-                // Fade the sheet's two long edges and the screen's sides.
-                vEdge = sin(aGrid.y * 3.14159) * smoothstep(0.0, 0.12, aGrid.x) * smoothstep(1.0, 0.88, aGrid.x);
+                vGlow = pow(1.0 - abs(n.z), 2.5);
+                vLine = abs(aGrid.y * 2.0 - 1.0);
+                // Fade toward the screen's sides.
+                vEdge = smoothstep(0.0, 0.15, aGrid.x) * smoothstep(1.0, 0.85, aGrid.x);
                 // Gentle perspective so nearer parts of the sheet sit a little lower. On a tall
                 // portrait screen the same NDC height is many more pixels, so flatten it there.
                 float persp = 1.0 / (1.0 + p.z * 0.35);
@@ -117,10 +125,14 @@ class Wave {
             precision mediump float;
             in float vGlow;
             in float vEdge;
+            in float vLine;
             uniform float uBrightness;
             out vec4 fragColor;
             void main() {
-                float a = (0.035 + 0.55 * vGlow) * vEdge * uBrightness;
+                float body = (0.05 + 0.6 * vGlow) * (1.0 - vLine * vLine * 0.6);
+                // A fine bright line along each long edge of the sheet.
+                float line = smoothstep(0.93, 0.995, vLine) * (0.35 + 0.65 * vGlow);
+                float a = (body + line * 0.55) * vEdge * uBrightness;
                 fragColor = vec4(vec3(a), 1.0);
             }"""
     }
