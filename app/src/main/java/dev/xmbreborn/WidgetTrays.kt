@@ -46,18 +46,19 @@ class WidgetTrays(
     private var pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
     private var running = true
 
-    private val button: TextView = text("+  Widget", 15f).apply {
+    private val button: TextView = text("+", 26f).apply {
         gravity = Gravity.CENTER
         background = GradientDrawable().apply {
-            setColor(Color.argb(200, 26, 18, 6)); setStroke(dp(1), AMBER); cornerRadius = dp(22).toFloat()
+            shape = GradientDrawable.OVAL
+            setColor(Color.argb(170, 26, 18, 6)); setStroke(dp(1), AMBER)
         }
-        setPadding(dp(18), dp(10), dp(18), dp(10))
+        includeFontPadding = false
         contentDescription = "Add a widget to this column"
         setOnClickListener { focusedColumn()?.let(::add) }
     }
 
     init {
-        root.addView(button, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        root.addView(button, FrameLayout.LayoutParams(dp(52), dp(52),
             Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(18), dp(56)) })
         // Rotating changes where trays go and how many columns they use.
         root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
@@ -234,7 +235,7 @@ class WidgetTrays(
         val left = left(column)
         val columns = if (landscape) 2 else 1
         val innerPx = (root.width - left) - dp(14) - (columns - 1) * dp(12)
-        val cardWidthDp = ((innerPx / columns - dp(28)) / density).toInt()
+        val cardWidthDp = ((innerPx / columns) / density).toInt()
         val cards = ids.mapNotNull { id ->
             val info = manager.getAppWidgetInfo(id) ?: return@mapNotNull null
             val name = info.loadLabel(activity.packageManager)
@@ -268,18 +269,17 @@ class WidgetTrays(
     }
 
     /** A widget in a dark glass card with a gold hairline; long-press the title row to remove it. */
-    private fun card(title: CharSequence, content: View, onRemove: () -> Unit) = LinearLayout(activity).apply {
+    /**
+     * A widget straight on the XMB background (no card: widgets bring their own), under a small,
+     * faint name. Long-press the name to arrange it; the widget itself keeps all its own touches.
+     */
+    private fun card(title: CharSequence, content: View, onArrange: () -> Unit) = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
-        background = GradientDrawable().apply {
-            setColor(Color.argb(175, 26, 18, 6)); setStroke(dp(1), Color.argb(120, 240, 190, 90)); cornerRadius = dp(16).toFloat()
-        }
-        setPadding(dp(14), dp(12), dp(14), dp(14))
-        addView(LinearLayout(activity).apply {
-            addView(text(title.toString().uppercase(), 11f, bold = true, color = Color.rgb(255, 226, 170)).apply { letterSpacing = 0.12f },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(text("Hold to arrange", 10f, color = AMBER, alpha = 0.9f))
-            setOnLongClickListener { onRemove(); true }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+        addView(text(title.toString(), 11f, alpha = 0.65f).apply {
+            setPadding(dp(4), dp(6), dp(4), dp(6)) // a comfortable target despite the small text
+            contentDescription = "$title. Long-press to arrange"
+            setOnLongClickListener { onArrange(); true }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
