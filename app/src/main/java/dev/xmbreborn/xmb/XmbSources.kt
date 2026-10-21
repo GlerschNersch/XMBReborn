@@ -1,0 +1,93 @@
+package dev.xmbreborn.xmb
+
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.LauncherApps
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.UserHandle
+import android.provider.Settings
+import java.text.Collator
+
+/** What opening an item does. */
+sealed interface Launch {
+    data class App(val component: ComponentName, val user: UserHandle) : Launch
+    data class Action(val intent: Intent) : Launch
+}
+
+/** An item's picture: an app's own icon, or one of our glyphs. */
+sealed interface ItemIcon {
+    class Bitmap(val bitmap: android.graphics.Bitmap) : ItemIcon
+    class Of(val glyph: Glyph) : ItemIcon
+}
+
+/**
+ * Builds the bar from the device: system settings shortcuts, apps grouped by their declared
+ * Play category, and an everything column. Mirrors the XMB's column order where one exists.
+ */
+class XmbSources(private val context: Context) {
+    private val launcherApps = context.getSystemService(LauncherApps::class.java)
+    val icons = HashMap<String, ItemIcon>()
+
+    fun build(iconPx: Int): List<XmbCategory> {
+        icons.clear()
+        val apps = loadApps(iconPx)
+        fun appsIn(vararg cats: Int) = apps.filter { it.category in cats }.map { it.item }
+        return listOf(
+            XmbCategory("settings", "Settings", Glyph.SETTINGS, settingsItems()),
+            XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn(ApplicationInfo.CATEGORY_IMAGE)),
+            XmbCategory("music", "Music", Glyph.MUSIC, appsIn(ApplicationInfo.CATEGORY_AUDIO)),
+            XmbCategory("video", "Video", Glyph.VIDEO, appsIn(ApplicationInfo.CATEGORY_VIDEO)),
+            XmbCategory("game", "Game", Glyph.GAME, appsIn(ApplicationInfo.CATEGORY_GAME)),
+            XmbCategory("network", "Network", Glyph.NETWORK,
+                appsIn(ApplicationInfo.CATEGORY_SOCIAL, ApplicationInfo.CATEGORY_NEWS, ApplicationInfo.CATEGORY_MAPS)),
+            XmbCategory("apps", "Apps", Glyph.APPS, apps.map { it.item }),
+        )
+    }
+
+    private class LoadedApp(val item: XmbItem, val category: Int)
+
+    private fun loadApps(iconPx: Int): List<LoadedApp> {
+        val self = context.packageName
+        val collator = Collator.getInstance()
+        val out = ArrayList<LoadedApp>()
+        for (user in launcherApps.profiles) {
+            for (info in launcherApps.getActivityList(null, user)) {
+                val component = info.componentName
+                if (component.packageName == self) continue
+                val id = "app:${component.flattenToShortString()}#${user.hashCode()}"
+                icons[id] = ItemIcon.Bitmap(rasterize(info.getBadgedIcon(0), iconPx))
+                val item = XmbItem(id, info.label.toString(), null, Launch.App(component, user))
+                out.add(LoadedApp(item, info.applicationInfo.category))
+            }
+        }
+        out.sortWith { a, b -> collator.compare(a.item.title, b.item.title) }
+        return out
+    }
+
+    private fun settingsItems(): List<XmbItem> = listOf(
+        Triple("All Settings", "Every system setting", Settings.ACTION_SETTINGS),
+        Triple("Network Settings", "Wi-Fi and internet", Settings.ACTION_WIRELESS_SETTINGS),
+        Triple("Bluetooth Settings", "Controllers, audio and other accessories", Settings.ACTION_BLUETOOTH_SETTINGS),
+        Triple("Display Settings", "Brightness, theme and screen", Settings.ACTION_DISPLAY_SETTINGS),
+        Triple("Sound Settings", "Volume and tones", Settings.ACTION_SOUND_SETTINGS),
+        Triple("Power Save Settings", "Battery use", Intent.ACTION_POWER_USAGE_SUMMARY),
+        Triple("Date and Time Settings", "Clock and time zone", Settings.ACTION_DATE_SETTINGS),
+        Triple("Application Settings", "Installed apps", Settings.ACTION_APPLICATION_SETTINGS),
+        Triple("Home Screen", "Choose the default launcher", Settings.ACTION_HOME_SETTINGS),
+        Triple("System Information", "About this device", Settings.ACTION_DEVICE_INFO_SETTINGS),
+    ).map { (title, subtitle, action) ->
+        val id = "settings:$action"
+        icons[id] = ItemIcon.Of(Glyph.SETTINGS)
+        XmbItem(id, title, subtitle, Launch.Action(Intent(action)))
+    }
+
+    private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        icon.setBounds(0, 0, px, px)
+        icon.draw(Canvas(bmp))
+        return bmp
+    }
+}

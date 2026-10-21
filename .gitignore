@@ -1,0 +1,8 @@
+# Extracted Sony firmware data: reference only, never commit or ship
+re/out/
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
