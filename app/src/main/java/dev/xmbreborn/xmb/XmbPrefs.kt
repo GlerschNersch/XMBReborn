@@ -46,6 +46,11 @@ class XmbPrefs(context: Context) {
         get() = p.getInt("chimeBoot", -1)
         set(v) = p.edit().putInt("chimeBoot", v).apply()
 
+    /** Tree URI of the folder ARMSX3's Frontend Export writes its .ps3 files to, or null. */
+    var ps3Folder: String?
+        get() = p.getString("ps3Folder", null)
+        set(v) = p.edit().putString("ps3Folder", v).apply()
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()

@@ -7,6 +7,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
 import android.os.UserHandle
 import android.provider.Settings
 import dev.xmbreborn.BootChime
@@ -18,11 +19,14 @@ sealed interface Launch {
     data class Action(val intent: Intent) : Launch
     /** One of the launcher's own settings; opening it shows its choices in the options panel. */
     data class Setting(val key: String) : Launch
+    /** A PS3 game, opened in ARMSX3 by its title id. */
+    data class Ps3(val titleId: String?, val file: String?) : Launch
 }
 
 /** An item's picture: an app's own icon, or one of our glyphs. */
 sealed interface ItemIcon {
-    class Bitmap(val bitmap: android.graphics.Bitmap) : ItemIcon
+    /** [wide]: a PS3 game icon (320x176), drawn at its own shape rather than square. */
+    class Bitmap(val bitmap: android.graphics.Bitmap, val wide: Boolean = false) : ItemIcon
     class Of(val glyph: Glyph) : ItemIcon
 }
 
@@ -33,6 +37,8 @@ sealed interface ItemIcon {
 class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     val icons = HashMap<String, ItemIcon>()
+    /** PS3 games' PIC1 backgrounds, by item id, faded in behind the bar while one is focused. */
+    val backgrounds = HashMap<String, Ps3Library.Pic1>()
 
     /** Apps left out of the bar because the user hid them, for the Hidden Apps setting. */
     @Volatile var hiddenApps: List<XmbItem> = emptyList()
@@ -40,17 +46,21 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
 
     fun build(iconPx: Int): List<XmbCategory> {
         icons.clear()
+        backgrounds.clear()
         val apps = loadApps(iconPx)
         val recent = prefs.recent
         // Category columns put what was opened last on top, like the PS3's Game column; the
         // Apps column stays A-Z so everything also has a fixed place.
         fun appsIn(vararg cats: Int) = byRecency(apps.filter { it.category in cats }.map { it.item }, recent)
+        // PS3 games first: the scan also sets the count the PS3 Games setting shows.
+        val games = byRecency(ps3Games() + apps.filter { it.category == ApplicationInfo.CATEGORY_GAME }.map { it.item }, recent)
+        val settings = settingsItems()
         return listOf(
-            XmbCategory("settings", "Settings", Glyph.SETTINGS, settingsItems()),
+            XmbCategory("settings", "Settings", Glyph.SETTINGS, settings),
             XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn(ApplicationInfo.CATEGORY_IMAGE)),
             XmbCategory("music", "Music", Glyph.MUSIC, appsIn(ApplicationInfo.CATEGORY_AUDIO)),
             XmbCategory("video", "Video", Glyph.VIDEO, appsIn(ApplicationInfo.CATEGORY_VIDEO)),
-            XmbCategory("game", "Game", Glyph.GAME, appsIn(ApplicationInfo.CATEGORY_GAME)),
+            XmbCategory("game", "Game", Glyph.GAME, games),
             XmbCategory("network", "Network", Glyph.NETWORK,
                 appsIn(ApplicationInfo.CATEGORY_SOCIAL, ApplicationInfo.CATEGORY_NEWS, ApplicationInfo.CATEGORY_MAPS)),
             XmbCategory("apps", "Apps", Glyph.APPS, apps.map { it.item }),
@@ -89,6 +99,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             Triple(SETTING_COLOR, "Theme Color", color),
             Triple(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient)),
             Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
+            Triple(SETTING_PS3, "PS3 Games", ps3Status()),
             Triple(SETTING_CHIME, "Startup Sound", if (BootChime.file(context) == null) "No sound file" else onOff(prefs.chime)),
             Triple(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }),
         ).map { (key, title, value) ->
@@ -115,6 +126,35 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         XmbItem(id, title, subtitle, Launch.Action(Intent(action)))
     }
 
+    /** The user's PS3 games from ARMSX3's exported folder; none if it isn't set up. */
+    private fun ps3Games(): List<XmbItem> {
+        val folder = prefs.ps3Folder ?: return emptyList()
+        if (Ps3Library.emulator(context.packageManager) == null) return emptyList()
+        val games = runCatching { Ps3Library.scan(context, Uri.parse(folder)) }.getOrNull()
+        lastPs3Count = games?.size
+        return games.orEmpty().map { g ->
+            val id = "ps3:${g.titleId ?: g.file}"
+            // The game's own ICON0 (320x176, drawn wide like the XMB's) or our game glyph.
+            val art = g.icon?.let { runCatching { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() }
+            icons[id] = art?.let { ItemIcon.Bitmap(it, wide = true) } ?: ItemIcon.Of(Glyph.GAME)
+            g.pic1?.let { backgrounds[id] = it }
+            XmbItem(id, g.title, listOfNotNull("PlayStation 3", g.titleId).joinToString(" · "), Launch.Ps3(g.titleId, g.file?.toString()))
+        }
+    }
+
+    private fun ps3Status(): String = when {
+        Ps3Library.emulator(context.packageManager) == null -> "Needs ARMSX3"
+        prefs.ps3Folder == null -> "Choose ARMSX3's export folder"
+        else -> when (val n = lastPs3Count) {
+            null -> "Folder not readable"
+            1 -> "1 game"
+            else -> "$n games"
+        }
+    }
+
+    /** Games found by the last scan (null if it failed), so the setting's subtitle needn't rescan. */
+    @Volatile private var lastPs3Count: Int? = null
+
     companion object {
         /** Most recently opened first; never-opened items keep their order after them. */
         fun byRecency(items: List<XmbItem>, recent: Map<String, Long>): List<XmbItem> =
@@ -125,6 +165,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_SOUNDS = "sounds"
         const val SETTING_HIDDEN = "hidden"
         const val SETTING_CHIME = "chime"
+        const val SETTING_PS3 = "ps3"
     }
 
     private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {

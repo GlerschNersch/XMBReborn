@@ -43,6 +43,23 @@ Requires Android 10 or newer and OpenGL ES 3.
 - Apps are grouped by the category the developer gave them (Photo, Music, Video, Game, Network),
   most recently opened first. **Apps** lists everything A–Z.
 
+## Playing PS3 games (optional, with ARMSX3)
+
+XMB Reborn can list your PS3 games in the Game column, with each game's own icon and name, and
+its background fading in when it's focused, as on a real PS3. Games play in
+[ARMSX3](https://github.com/ARMSX2/ARMSX3), a separate Android port of the RPCS3 emulator. Install
+that first, with your own PS3 firmware and game dumps. Neither app includes them.
+
+1. In ARMSX3, add your games folder to its library.
+2. In XMB Reborn, go to **Settings → PS3 Games → Choose Folder** and pick either your games folder
+   or the folder ARMSX3's **Frontend Export** writes to.
+3. Your games appear in **Game**. Opening one starts it in ARMSX3.
+
+It reads game folders (`<Game>/PS3_GAME/PARAM.SFO`, `ICON0.PNG`, `PIC1.PNG`), ISO 9660 disc images
+(`.iso`) and ARMSX3's `.ps3` export files. Games open by title id, or by file for images without
+one. How well a game plays depends on ARMSX3 and your phone; PS3 emulation on Android is still
+experimental and wants a recent flagship.
+
 ## Using your own PS3 sounds (optional)
 
 The app makes its own menu clicks. If you own a PS3 firmware copy, you can have it play the

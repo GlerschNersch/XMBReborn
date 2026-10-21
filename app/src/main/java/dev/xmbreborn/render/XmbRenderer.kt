@@ -116,7 +116,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
     fun post(change: (XmbRenderer) -> Unit) { pending.add(change) }
 
     /** Installs a freshly built bar (GL thread). Keeps the previous focus where ids still match. */
-    fun setModel(newModel: XmbModel, newIcons: Map<String, ItemIcon>) {
+    fun setModel(newModel: XmbModel, newIcons: Map<String, ItemIcon>, newBackgrounds: Set<String> = emptySet()) {
+        backgroundIds = newBackgrounds
         val old = model
         if (old != null) {
             old.focused.id.let { id -> newModel.categories.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let(newModel::setCategory) }
@@ -133,7 +134,50 @@ class XmbRenderer : GLSurfaceView.Renderer {
         motion = XmbMotion(newModel).also { it.snap() }
     }
 
+    // A focused PS3 game's PIC1 background: requested once focus has rested on the game a moment,
+    // then faded in over the wave, and out again when focus moves on, as on the PS3.
+    private var backgroundIds: Set<String> = emptySet()
+    private var gameBg: Tex? = null
+    private var gameBgId: String? = null
+    private var gameBgAlpha = 0f
+    private var dwellId: String? = null
+    private var dwell = 0f
+    private var requestedBg: String? = null
+
+    /** Asked (GL thread) for a game's background by item id; answer with [setGameBackground]. */
+    var onWantBackground: ((String) -> Unit)? = null
+
+    /** A loaded background (GL thread). Replaces the previous one. */
+    fun setGameBackground(id: String, bitmap: android.graphics.Bitmap) {
+        gameBg?.let { dev.xmbreborn.gl.Gl.deleteTexture(it.id) }
+        gameBg = Tex(dev.xmbreborn.gl.Gl.texture(bitmap, false), bitmap.width, bitmap.height)
+        gameBgId = id
+        bitmap.recycle()
+    }
+
+    private fun drawGameBackground(model: XmbModel, dt: Float) {
+        val focused = model.focused.focusedItem?.id
+        if (focused != dwellId) { dwellId = focused; dwell = 0f } else dwell += dt
+        if (focused != null && focused in backgroundIds && dwell >= M.GAME_BG_DWELL && requestedBg != focused) {
+            requestedBg = focused
+            onWantBackground?.invoke(focused)
+        }
+        val target = if (gameBg != null && gameBgId == focused && dim < 0.5f) 1f else 0f
+        gameBgAlpha += (target - gameBgAlpha) * (1f - exp(-dt / M.GAME_BG_FADE))
+        val tex = gameBg ?: return
+        if (gameBgAlpha < 0.004f) return
+        // Cover the screen, cropping whichever way the aspect doesn't fit.
+        val s = maxOf(layout.width / tex.width, layout.height / tex.height)
+        val w = tex.width * s
+        val h = tex.height * s
+        sprites.draw(tex.id, (layout.width - w) / 2, (layout.height - h) / 2, w, h, gameBgAlpha)
+    }
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        // A new GL context: the old background texture is gone with the old one.
+        gameBg = null
+        gameBgId = null
+        requestedBg = null
         background.init()
         wave.init()
         particles.init()
@@ -179,6 +223,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         stepOptions(dt)
 
         sprites.begin(layout.width, layout.height)
+        drawGameBackground(model, dt)
         // Start-up: the scene rises out of black first, then the bar fades in over it.
         val introBar = drawIntroCover(intro)
         val items = layout.items(model, motion)
@@ -323,14 +368,20 @@ class XmbRenderer : GLSurfaceView.Renderer {
             is ItemIcon.Of -> textures.icon("glyph:${icon.glyph}:$iconPx") { GlyphPainter.render(icon.glyph, iconPx) }
             null -> null
         }
+        // PS3 game icons (320x176) keep their shape, at the size the XMB draws them; their title
+        // then starts just past the icon's right edge.
+        val wide = icon is ItemIcon.Bitmap && icon.wide
+        val iconW = if (wide) XmbLayout.lerp(M.GAME_ICON_WIDTH, M.GAME_ICON_WIDTH_FOCUSED, p.focus) * layout.unit else p.size
+        val iconH = if (wide) iconW * M.GAME_ICON_ASPECT else p.size
         // Apps keep their own colours; our glyphs are lit, tinted and translucent like the XMB's.
         if (tex != null) {
             if (icon is ItemIcon.Of) sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade * IconTint.OPACITY, glyphTint)
-            else sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade)
+            else sprites.draw(tex.id, p.x - iconW / 2, p.y - iconH / 2, iconW, iconH, p.alpha * fade)
         }
 
         val titleSize = M.ITEM_LABEL_SIZE * layout.unit
-        val textX = layout.labelX(p.x) - TextureCache.padFor(titleSize) + if (shift) M.OPTIONS_LABEL_SHIFT * layout.unit * lift else 0f
+        val labelX = if (wide) p.x + iconW / 2 + M.GAME_LABEL_GAP * layout.unit else layout.labelX(p.x)
+        val textX = labelX - TextureCache.padFor(titleSize) + if (shift) M.OPTIONS_LABEL_SHIFT * layout.unit * lift else 0f
         // Long names stop short of the screen's edge with an ellipsis. Measured from the focused
         // column's resting place, not this frame's x, so scrolling doesn't re-render labels.
         val maxW = layout.width - layout.labelX(layout.anchorX) - M.LABEL_EDGE_MARGIN * layout.unit

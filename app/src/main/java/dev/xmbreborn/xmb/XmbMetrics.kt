@@ -34,6 +34,16 @@ object XmbMetrics {
     const val ITEM_LABEL_X = 78f            // titles start here from the column centre, every row
     const val ITEM_LABEL_SIZE = 21f
     const val ITEM_SUBTITLE_SIZE = 12f
+    // PS3 game icons (ICON0, 320x176), as the XMB draws them: measured 290x159 focused and
+    // 97x53 unfocused. Their titles start just past the icon's right edge (ours: the capture's
+    // only game had a placeholder icon, so the gap isn't measured).
+    const val GAME_ICON_WIDTH = 97f
+    const val GAME_ICON_WIDTH_FOCUSED = 290f
+    const val GAME_ICON_ASPECT = 176f / 320f
+    const val GAME_LABEL_GAP = 12f
+    // A focused game's PIC1 background: asked for after focus rests this long, then faded (ours).
+    const val GAME_BG_DWELL = 0.35f
+    const val GAME_BG_FADE = 0.30f
     const val LABEL_EDGE_MARGIN = 16f       // ours: long labels end with an ellipsis this far from the edge
     /** How fast a column's rows fade as the bar scrolls away from it (1/columns). Measured: the
      *  old and new lists cross-fade linearly over the whole move, opacity = 1 - progress. */

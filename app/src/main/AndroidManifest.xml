@@ -7,6 +7,9 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- ARMSX3 (PS3 emulator), which plays the PS3 games in the Game column. -->
+        <package android:name="com.armsx3" />
+        <package android:name="com.armsx3.play" />
     </queries>
 
     <!-- Uninstall from the options panel (ACTION_DELETE needs this from Android 9). -->
