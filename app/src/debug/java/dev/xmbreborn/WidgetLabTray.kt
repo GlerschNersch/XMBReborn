@@ -196,11 +196,12 @@ class WidgetLabTray(private val activity: Activity, private val xmb: XmbView) {
     // ---- real widgets ----------------------------------------------------------------------------
 
     /** A column of real Android widgets, each in a gold glass card titled with its name. */
-    fun realColumn(width: Int, height: Int, widgets: List<Triple<CharSequence, View, Int>>): View =
-        column(width, height, *widgets.map { (title, view, heightDp) ->
-            card(title.toString().uppercase(), "Widget").apply {
-                // The widget sizes itself (scaled to fit); heightDp is its unscaled height.
-                addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    fun realColumn(width: Int, height: Int, cards: List<TrayCard>): View =
+        column(width, height, *cards.map { c ->
+            card(c.title.toString().uppercase(), "Hold to remove").apply {
+                // The title row: long-press it to remove the widget (the widget itself keeps its own touches).
+                getChildAt(0).setOnLongClickListener { c.onLongPress(); true }
+                addView(c.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
         }.toTypedArray())
 
