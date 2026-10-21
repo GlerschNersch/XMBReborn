@@ -8,17 +8,17 @@ import kotlin.math.exp
 import kotlin.math.sin
 
 /**
- * Short UI ticks synthesized at startup (our own sounds, no recorded assets): a soft high
- * "tick" for cursor moves, a brighter two-tone for opening something, a low one for back.
+ * UI clicks, synthesized at startup (our own sounds, no recorded assets). Shaped after the PS3's
+ * (docs/RE_NOTES.md): one 40 ms click for cursor, decide and options, centred near 6.8 kHz with
+ * nearly all its energy in the first 4 ms; cancel is the same click a little lower and quieter.
  */
 class Sfx {
-    enum class Kind { CURSOR, DECIDE, CANCEL }
+    enum class Kind { CURSOR, DECIDE, CANCEL, OPTION }
 
     private val tracks = Kind.entries.associateWith { kind ->
         when (kind) {
-            Kind.CURSOR -> track(tone(listOf(2600.0 to 1.0, 5200.0 to 0.25), 0.045, decay = 90.0, gain = 0.22))
-            Kind.DECIDE -> track(tone(listOf(1800.0 to 1.0, 2700.0 to 0.6), 0.09, decay = 45.0, gain = 0.25))
-            Kind.CANCEL -> track(tone(listOf(1100.0 to 1.0, 1650.0 to 0.4), 0.07, decay = 60.0, gain = 0.22))
+            Kind.CURSOR, Kind.DECIDE, Kind.OPTION -> track(click(6840.0, upper = 1.30, lower = 0.712, peak = 0.16))
+            Kind.CANCEL -> track(click(6450.0, upper = 1.30, lower = 0.0, peak = 0.08))
         }
     }
 
@@ -36,14 +36,20 @@ class Sfx {
 
     fun release() = tracks.values.forEach { it.release() }
 
-    private fun tone(partials: List<Pair<Double, Double>>, seconds: Double, decay: Double, gain: Double): ShortArray {
-        val n = (RATE * seconds).toInt()
-        val total = partials.sumOf { it.second }
+    /**
+     * A struck, quickly damped partial plus two faint neighbours (-17 and -19 dB, as measured):
+     * a fast 2.7 ms decay carries the click, a quieter 12 ms one leaves the short tail.
+     */
+    private fun click(freq: Double, upper: Double, lower: Double, peak: Double): ShortArray {
+        val n = (RATE * 0.040).toInt()
         return ShortArray(n) { i ->
             val t = i / RATE.toDouble()
-            val attack = (t / 0.002).coerceAtMost(1.0)
-            val s = partials.sumOf { (f, a) -> a * sin(2 * PI * f * t) } / total
-            (s * attack * exp(-decay * t) * gain * Short.MAX_VALUE).toInt().toShort()
+            val attack = (t / 0.0004).coerceAtMost(1.0)
+            val env = attack * (0.8 * exp(-t / 0.0027) + 0.2 * exp(-t / 0.012))
+            val s = sin(2 * PI * freq * t) +
+                0.14 * sin(2 * PI * freq * upper * t) +
+                (if (lower > 0) 0.11 * sin(2 * PI * freq * lower * t) else 0.0)
+            (s / 1.25 * env * peak * Short.MAX_VALUE).toInt().toShort()
         }
     }
 

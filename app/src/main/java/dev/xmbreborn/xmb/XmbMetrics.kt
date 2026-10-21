@@ -47,15 +47,25 @@ object XmbMetrics {
     const val CLOCK_Y_PORTRAIT = 0.05f
     const val CLOCK_INSET_GAP = 8f          // ours: space kept between the status bar and the clock bar
 
-    // Options (Triangle / long-press) panel, measured 21 Oct; not drawn yet.
-    const val OPTIONS_PANEL_X = 880f        // left edge, from the screen's left on the 1280 canvas
-    const val OPTIONS_OVERLAY = 0.20f       // white overlay opacity, flat to +70, gone by +260
+    // Options (Triangle / long-press) panel, measured 21 Oct (docs/RE_NOTES.md).
+    const val OPTIONS_PANEL_X = 880f        // left edge on the 1280 canvas
+    const val OPTIONS_OVERLAY = 0.20f       // white overlay opacity...
+    const val OPTIONS_FADE_FLAT = 70f       // ...flat this far from the edge...
+    const val OPTIONS_FADE_WIDTH = 260f     // ...and clear by here
     const val OPTIONS_TEXT_X = 10f          // from the panel edge
     const val OPTIONS_TEXT_SIZE = 17f
     const val OPTIONS_ROW = 27f
-    const val OPTIONS_BELOW_FOCUS = 30f     // first item option, below the focused row
+    const val OPTIONS_BELOW_FOCUS = 30f     // first option, below the focused row
+    const val OPTIONS_UNFOCUSED = 0.55f     // unfocused option text opacity
     const val OPTIONS_SLIDE = 26f           // the panel eases in from this far right
+    const val OPTIONS_DELAY = 0.13f         // the panel starts once the rest has dimmed
     const val OPTIONS_TIME_CONSTANT = 0.090f
+    const val OPTIONS_DIM_TIME = 0.055f
+    const val OPTIONS_DIM = 0.6f            // everything else drops to ~40%
+    const val OPTIONS_DIM_PORTRAIT = 0.9f   // ours: the panel overlaps labels on narrow screens
+    const val OPTIONS_BAND = 0.18f          // darker band from the focused row to the panel
+    const val OPTIONS_LABEL_SHIFT = 39f     // the focused label moves right...
+    const val OPTIONS_LABEL_DIM = 0.6f      // ...and dims
 
     // Motion: exponential approach, 24% of the remaining distance per 60 Hz frame
     // (measured: 0.24, 0.42, 0.56, 0.67, 0.75 ...), i.e. a 60 ms time constant. Rows move the same.

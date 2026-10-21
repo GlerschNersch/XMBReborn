@@ -9,6 +9,10 @@ import kotlin.math.pow
  * up from the bottom of an otherwise dark screen; [colors] applies that flip.
  */
 object MonthPalette {
+    /** Our names for the twelve month colours, offered as fixed theme colours. */
+    val NAMES = listOf("Silver", "Gold", "Lime", "Pink", "Green", "Purple",
+        "Teal", "Blue", "Magenta", "Orange", "Brown", "Red")
+
     /** [month 0..11][tl, tr, bl, br, centre] */
     private val DAY = arrayOf(
         intArrayOf(0xe8e8e8, 0xd1d1d1, 0xdddddd, 0xb5b7b8, 0xbababa),

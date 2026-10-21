@@ -15,6 +15,8 @@ import java.text.Collator
 sealed interface Launch {
     data class App(val component: ComponentName, val user: UserHandle) : Launch
     data class Action(val intent: Intent) : Launch
+    /** One of the launcher's own settings; opening it shows its choices in the options panel. */
+    data class Setting(val key: String) : Launch
 }
 
 /** An item's picture: an app's own icon, or one of our glyphs. */
@@ -27,7 +29,7 @@ sealed interface ItemIcon {
  * Builds the bar from the device: system settings shortcuts, apps grouped by their declared
  * Play category, and an everything column. Mirrors the XMB's column order where one exists.
  */
-class XmbSources(private val context: Context) {
+class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     val icons = HashMap<String, ItemIcon>()
 
@@ -67,7 +69,24 @@ class XmbSources(private val context: Context) {
         return out
     }
 
-    private fun settingsItems(): List<XmbItem> = listOf(
+    /** The Settings column: our Theme and Sound settings first, then shortcuts into Android's. */
+    fun settingsItems(): List<XmbItem> = launcherSettings() + systemSettings()
+
+    private fun launcherSettings(): List<XmbItem> {
+        val color = prefs.color.let { if (it == XmbPrefs.ORIGINAL) "Original" else MonthPalette.NAMES[it] }
+        fun onOff(v: Boolean) = if (v) "On" else "Off"
+        return listOf(
+            Triple(SETTING_COLOR, "Theme Color", color),
+            Triple(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient)),
+            Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
+        ).map { (key, title, value) ->
+            val id = "setting:$key"
+            icons[id] = ItemIcon.Of(Glyph.SETTINGS)
+            XmbItem(id, title, value, Launch.Setting(key))
+        }
+    }
+
+    private fun systemSettings(): List<XmbItem> = listOf(
         Triple("All Settings", "Every system setting", Settings.ACTION_SETTINGS),
         Triple("Network Settings", "Wi-Fi and internet", Settings.ACTION_WIRELESS_SETTINGS),
         Triple("Bluetooth Settings", "Controllers, audio and other accessories", Settings.ACTION_BLUETOOTH_SETTINGS),
@@ -82,6 +101,12 @@ class XmbSources(private val context: Context) {
         val id = "settings:$action"
         icons[id] = ItemIcon.Of(Glyph.SETTINGS)
         XmbItem(id, title, subtitle, Launch.Action(Intent(action)))
+    }
+
+    companion object {
+        const val SETTING_COLOR = "color"
+        const val SETTING_AMBIENT = "ambient"
+        const val SETTING_SOUNDS = "sounds"
     }
 
     private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {

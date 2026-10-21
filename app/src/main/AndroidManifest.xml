@@ -9,6 +9,9 @@
         </intent>
     </queries>
 
+    <!-- Uninstall from the options panel (ACTION_DELETE needs this from Android 9). -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
 
     <application

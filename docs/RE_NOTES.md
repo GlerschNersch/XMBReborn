@@ -152,3 +152,23 @@ Options (Triangle) menu:
 
 Wave and particles: `idle.mp4` (9 s, 30 fps). In 2 s the ribbon's height and tilt change a lot
 (it drifts 100–200 px vertically across the screen). It's reference for tuning `Wave.kt`'s speed.
+
+## Sounds and theme colours (21 Oct)
+
+Interface sounds (`system_plugin.rco`): `snd_cursor`, `snd_decide`, `snd_option` and
+`snd_category_decide` are **the same sound**. It's a 40 ms click centred near 6.84 kHz with faint
+partials at 8.9 kHz (−17 dB) and 4.87 kHz (−19 dB), peak 0.09 FS. Nearly all its energy is in the
+first 4 ms (window peaks 1, 0.23, 0.14, 0.11 … of the peak). `snd_cancel` is the same click at
+6.45 kHz and about half the level. `Sfx.kt` synthesizes clicks to this description: a struck
+partial with a 2.7 ms + 12 ms double decay. Rendered, its 4 ms windows run 0.135 / 0.041 / 0.020
+against the original's 0.160 / 0.037 / 0.023 (scaled to the same peak).
+
+There's no ambient loop anywhere in dev_flash. The only long sounds are the boot chime
+(`coldboot_*.ac3`, `coldboot.raf`) and the Store's own effects (`newstore/sound/*.vag`). The
+launcher's optional ambient bed (`Ambient.kt`) is therefore original material, not a recreation.
+
+Theme colours: the only background colours in the firmware are the 24 month gradients (12 day +
+12 night). The colour setting (`sysconf_plugin` → `page_theme_config_color`) can therefore only
+choose one of those 12 months or "Original" (follow the calendar), and that's what the launcher
+offers. The setting's text table didn't decode (the RCO text section needs decompressing), so the
+option names are ours.
