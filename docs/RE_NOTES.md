@@ -81,7 +81,7 @@ onScrollIn/onScrollOut/onCursorMove`.
 
 ## Not yet extracted
 
-- Motion: focus scale, icon spacing, scroll easing and durations. They're in
+- ~~Motion~~: measured, see below. (Originally: focus scale, spacing, easing and durations, in
   `explore_plugin.sprx` (PPU code). Plan: measure them behaviourally by booting
   `dev_flash/vsh/module/vsh.self` in RPCS3 and frame-capturing navigation, instead of
   disassembling.
@@ -117,3 +117,38 @@ At night (20 Oct 23:57) the screen is black at the top and #371c01 at the bottom
 night texture #d89200, which fits ≈ 0.29·c^1.73. The schedule comes from `BACKGROUND.mnu`:
 NIGHT2DAY 0 → 5.17 h, DAY2NIGHT 18.50 → 20.33 h, NIGHT BLEND 0.5, DAYSPREAD 2.68,
 NIGHT WHIT BIAS 0.486 (the last three aren't used yet).
+
+## Second capture session (RPCS3, 21 Oct 08:19–08:28, day)
+
+Captures are in `re/out/captures/` (gitignored): `vert`, `horiz`, `opts`, `idle` (.mp4 + key logs),
+`day_oct_0819.png`, `opts_open.png`, `icons_full.png`. `regions.py` gives per-frame box stats.
+If the XMB sits idle it goes to a black "Press and hold START" screen and then the VSH shuts
+down (`SceVshForceShutdown` in the log). Ctrl+P resumes RPCS3 itself; after a shutdown, reboot vsh.self.
+
+Day background: the flip holds by day too (screen top = texture's bottom row). After the
+BACKGROUND.mnu corner multipliers (1, 1, 0.847, 0.924 = tl, tr, bl, br on screen), day reaches the
+screen as ≈ 0.303·c + 0.112 (a flat white haze), rms 10/255 against the frame, worst at the left edge.
+Night refits to 0.342·c^1.73 with the multipliers. A bright band along the very top edge (y < 60)
+isn't modelled.
+
+Vertical motion: same exponential as horizontal, 22–27% of the remaining distance per frame,
+τ ≈ 0.05–0.06 s (tracked on the uniformly spaced rows, so no smearing).
+
+Column change: the lists travel with their columns and cross-fade **linearly over the whole move**.
+The old list's opacity is exactly 1 − progress (0.24→0.76, 0.42→0.58, 0.67→0.34, 0.90→0.09), so both
+lists are half visible mid-move. Bar icon size also lerps linearly with distance (mid-move widths
+within ±3 px of the lerp).
+
+Options (Triangle) menu:
+- The panel spans from x 880 to the right edge, full height. A 1 px hairline marks the left edge,
+  then a white overlay at 20% opacity, flat to x ~950, falling linearly to 0 by x ~1140.
+- Text at x 890, ~17 px. Rows 27 apart. Column-wide options (Sort By, Group Content) sit just under
+  the bar (y 207, 234). Item options start 30 below the focused row (y 367, 394, 420). The focused
+  option is white, the others dimmer. Submenus show a ▸ at x ~1050.
+- Opening: the rows above, the clock and the "Options" hint fade out (τ ≈ 0.055 s, done in ~0.12 s).
+  The focused row gets a darker band across to the panel and its label dims and shifts right.
+  About 0.13 s after the press the panel appears at x ~906 and eases left to 880 (τ ≈ 0.09 s).
+- Closing reverses it: the panel slides right ~40 px and fades within ~0.17 s while the rest comes back.
+
+Wave and particles: `idle.mp4` (9 s, 30 fps). In 2 s the ribbon's height and tilt change a lot
+(it drifts 100–200 px vertically across the screen). It's reference for tuning `Wave.kt`'s speed.

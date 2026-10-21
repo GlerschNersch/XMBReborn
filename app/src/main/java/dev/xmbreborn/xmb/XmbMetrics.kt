@@ -34,8 +34,9 @@ object XmbMetrics {
     const val ITEM_LABEL_X = 78f            // titles start here from the column centre, every row
     const val ITEM_LABEL_SIZE = 21f
     const val ITEM_SUBTITLE_SIZE = 12f
-    /** How fast a column's rows fade as the bar scrolls away from it (1/columns). */
-    const val ROW_FADE_RATE = 2.5f
+    /** How fast a column's rows fade as the bar scrolls away from it (1/columns). Measured: the
+     *  old and new lists cross-fade linearly over the whole move, opacity = 1 - progress. */
+    const val ROW_FADE_RATE = 1f
 
     // Clock, top right: right-aligned text on a translucent bar that runs off the right edge.
     const val CLOCK_SIZE = 18f
@@ -46,7 +47,17 @@ object XmbMetrics {
     const val CLOCK_Y_PORTRAIT = 0.05f
     const val CLOCK_INSET_GAP = 8f          // ours: space kept between the status bar and the clock bar
 
+    // Options (Triangle / long-press) panel, measured 21 Oct; not drawn yet.
+    const val OPTIONS_PANEL_X = 880f        // left edge, from the screen's left on the 1280 canvas
+    const val OPTIONS_OVERLAY = 0.20f       // white overlay opacity, flat to +70, gone by +260
+    const val OPTIONS_TEXT_X = 10f          // from the panel edge
+    const val OPTIONS_TEXT_SIZE = 17f
+    const val OPTIONS_ROW = 27f
+    const val OPTIONS_BELOW_FOCUS = 30f     // first item option, below the focused row
+    const val OPTIONS_SLIDE = 26f           // the panel eases in from this far right
+    const val OPTIONS_TIME_CONSTANT = 0.090f
+
     // Motion: exponential approach, 24% of the remaining distance per 60 Hz frame
-    // (measured: 0.24, 0.42, 0.56, 0.67, 0.75 ...), i.e. a 60 ms time constant.
+    // (measured: 0.24, 0.42, 0.56, 0.67, 0.75 ...), i.e. a 60 ms time constant. Rows move the same.
     const val FOCUS_TIME_CONSTANT = 0.060f
 }

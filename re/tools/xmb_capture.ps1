@@ -20,7 +20,7 @@ public static class Win {
 }
 '@
 
-$vk = @{ Left = 0x25; Up = 0x26; Right = 0x27; Down = 0x28; X = 0x58; C = 0x43; Enter = 0x0D; Space = 0x20 }
+$vk = @{ Left = 0x25; Up = 0x26; Right = 0x27; Down = 0x28; X = 0x58; C = 0x43; V = 0x56; Z = 0x5A; Enter = 0x0D; Space = 0x20 }
 $extended = @('Left', 'Up', 'Right', 'Down')
 
 $proc = Get-Process rpcs3 | Where-Object MainWindowTitle -like '*vsh*' | Select-Object -First 1

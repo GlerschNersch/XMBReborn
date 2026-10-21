@@ -95,15 +95,22 @@ class XmbModelTest {
         assertEquals(3, rows.size)
     }
 
-    @Test fun neighbouringColumnsNeverShowRowsTogether() {
+    @Test fun neighbouringColumnsCrossFadeLinearly() {
+        // Measured on the real XMB: the old list's opacity is 1 - progress of the bar's move.
         val m = model()
         val motion = XmbMotion(m)
         m.moveCategory(1)
         val layout = XmbLayout(1280f, 720f)
+        var sawBoth = false
         while (motion.step(1 / 120f)) {
-            val visible = layout.items(m, motion).filter { it.alpha > 0.01f }.map { it.category }.toSet()
-            assertTrue("columns $visible visible at ${motion.category}", visible.size <= 1)
+            val byColumn = layout.items(m, motion).groupBy { it.category }.mapValues { (_, r) -> r.maxOf { it.alpha } }
+            val old = byColumn[0] ?: 0f
+            val new = byColumn[1] ?: 0f
+            assertEquals(1f - motion.category, old, 0.02f)
+            assertEquals(motion.category, new, 0.02f)
+            if (old > 0.2f && new > 0.2f) sawBoth = true
         }
+        assertTrue("both lists show mid-move", sawBoth)
     }
 
     @Test fun nightnessFollowsThePs3Schedule() {
@@ -120,5 +127,17 @@ class XmbModelTest {
         assertTrue("top-left dark", c[0] < 0.02f && c[1] < 0.02f)
         assertEquals(0x37 / 255f, c[6], 0.04f)  // bottom-left red
         assertEquals(0x1c / 255f, c[7], 0.04f)  // bottom-left green
+    }
+
+    @Test fun octoberDayMatchesTheCapturedFrame() {
+        // Real XMB, 21 Oct 08:19: yellow-olive above, brown below (bl #503a19, br #594020).
+        // The 5-colour gradient fits the frame to ~10/255 rms, worst at the left edge (~16).
+        val c = MonthPalette.colors(9, 8.3f)
+        val tol = 0.07f
+        assertEquals(0x50 / 255f, c[6], tol)
+        assertEquals(0x3a / 255f, c[7], tol)
+        assertEquals(0x59 / 255f, c[9], tol)
+        assertEquals(0x40 / 255f, c[10], tol)
+        assertTrue("top is yellower than the bottom", c[1] / c[0] > c[7] / c[6])
     }
 }

@@ -46,8 +46,12 @@ object MonthPalette {
     private const val DAY2NIGHT_BEGIN = 18.498f
     private const val DAY2NIGHT_END = 20.3312f
 
-    // Fitted to a captured XMB frame: the night texture reaches the screen as ~0.29 * c^1.73.
-    private const val NIGHT_GAIN = 0.29f
+    // Fitted to captured XMB frames, after BACKGROUND.mnu's corner multipliers. By day the texture
+    // reaches the screen as ~0.303 * c plus a flat white haze of 0.112 (21 Oct 08:19); by night as
+    // ~0.342 * c^1.73 with no haze (20 Oct 23:57).
+    private const val DAY_GAIN = 0.303f
+    private const val DAY_HAZE = 0.112f
+    private const val NIGHT_GAIN = 0.342f
     private const val NIGHT_GAMMA = 1.73f
 
     /** 0 = full day, 1 = full night, for an hour of day (0..24, fractional). */
@@ -63,6 +67,9 @@ object MonthPalette {
         return x * x * (3f - 2f * x)
     }
 
+    /** BACKGROUND.mnu corner multipliers, by screen corner (tl, tr, bl, br, centre = their mean). */
+    private val CORNER = floatArrayOf(1f, 1f, 0.847f, 0.924f, 0.943f)
+
     /** Screen corner -> texture corner, for the vertical flip: tl<-bl, tr<-br, bl<-tl, br<-tr. */
     private val FLIP = intArrayOf(2, 3, 0, 1, 4)
 
@@ -75,9 +82,9 @@ object MonthPalette {
             val k = NIGHT[m][FLIP[i]]
             for (c in 0 until 3) {
                 val shift = 16 - 8 * c
-                val dv = (d shr shift and 0xff) / 255f
+                val dv = DAY_GAIN * ((d shr shift and 0xff) / 255f) + DAY_HAZE / CORNER[i]
                 val nv = NIGHT_GAIN * ((k shr shift and 0xff) / 255f).pow(NIGHT_GAMMA)
-                out[i * 3 + c] = dv + (nv - dv) * n
+                out[i * 3 + c] = (dv + (nv - dv) * n) * CORNER[i]
             }
         }
         return out

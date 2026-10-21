@@ -38,7 +38,7 @@ class XmbLayout(val width: Float, val height: Float) {
     fun items(model: XmbModel, motion: XmbMotion): List<Placement> {
         val out = ArrayList<Placement>()
         for (c in model.categories.indices) {
-            // Rows vanish within the first 40% of a column change so neighbours never overlap.
+            // Old and new lists cross-fade linearly as the bar moves, as on the PS3.
             val columnAlpha = max(0f, 1f - abs(c - motion.category) * M.ROW_FADE_RATE)
             if (columnAlpha <= 0.01f) continue
             val x = columnX(c, motion.category)
