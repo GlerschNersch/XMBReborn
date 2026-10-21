@@ -131,10 +131,47 @@ class WidgetTrays(
         refill(column)
     }
 
-    /** Lets touches through to the bar underneath while the tray inside is hidden. */
-    private class Gate(context: Context) : FrameLayout(context) {
+    /**
+     * Sits over a column's tray. While the tray is hidden it lets touches through to the bar.
+     * While it shows, a gesture that turns clearly sideways is handed to the bar, so swiping over
+     * a widget still changes category; taps, vertical scrolls and press-and-hold stay with the
+     * widgets (a picked-up widget blocks this while it's dragged).
+     */
+    private inner class Gate(context: Context) : FrameLayout(context) {
         var passThrough = true
+        private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+        private var downX = 0f
+        private var downY = 0f
+        private var downTime = 0L
+        private var toBar = false
+
         override fun dispatchTouchEvent(ev: MotionEvent): Boolean = !passThrough && super.dispatchTouchEvent(ev)
+
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downX = ev.x; downY = ev.y; downTime = ev.downTime; toBar = false }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = ev.x - downX
+                    val dy = ev.y - downY
+                    if (abs(dx) > slop && abs(dx) > abs(dy) * SIDEWAYS) {
+                        // Start the bar's gesture where the finger went down, then feed it the rest.
+                        toBar = true
+                        MotionEvent.obtain(downTime, ev.eventTime, MotionEvent.ACTION_DOWN, downX, downY, 0).also {
+                            xmb.dispatchTouchEvent(it); it.recycle()
+                        }
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+
+        override fun onTouchEvent(ev: MotionEvent): Boolean {
+            if (!toBar) return false
+            xmb.dispatchTouchEvent(ev)
+            if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) toBar = false
+            return true
+        }
     }
 
     // ---- adding and removing -------------------------------------------------------------------
@@ -440,6 +477,8 @@ class WidgetTrays(
         const val LEFT_LANDSCAPE = 0.40f
         const val TOP_LANDSCAPE = 0.36f
         const val LIST_SCALE = 0.8f
+        /** How much more sideways than vertical a swipe over a widget must be to go to the bar. */
+        const val SIDEWAYS = 1.3f
         const val WIDE_LEFT = 0.30f
         const val WIDE_LEFT_LANDSCAPE = 0.28f
         /** Card heights for Small / Medium / Large, relative to the widget's own size. */
