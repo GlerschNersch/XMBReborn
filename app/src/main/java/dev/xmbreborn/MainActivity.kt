@@ -58,6 +58,7 @@ class MainActivity : Activity() {
         override fun onPackageChanged(packageName: String, user: UserHandle) = reload()
         override fun onPackagesAvailable(packageNames: Array<out String>, user: UserHandle, replacing: Boolean) = reload()
         override fun onPackagesUnavailable(packageNames: Array<out String>, user: UserHandle, replacing: Boolean) = reload()
+        override fun onShortcutsChanged(packageName: String, shortcuts: MutableList<android.content.pm.ShortcutInfo>, user: UserHandle) = reload()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -126,6 +127,16 @@ class MainActivity : Activity() {
     private fun otherMediaPlaying(configs: List<AudioPlaybackConfiguration> = audio.activePlaybackConfigurations) =
         configs.any { it.audioAttributes.usage == AudioAttributes.USAGE_MEDIA }
 
+    /**
+     * Home pressed while home is already showing: glide back to the start (the Apps column, top
+     * row), like returning to the XMB. Coming home from another app keeps where you were.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val alreadyHome = hasWindowFocus() && (intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT) == 0
+        if (Intent.ACTION_MAIN == intent.action && intent.hasCategory(Intent.CATEGORY_HOME) && alreadyHome) view.goHome("apps")
+    }
+
     /** Home is already showing; back only closes the options panel. */
     @Deprecated("Launcher ignores back")
     override fun onBackPressed() {
@@ -180,6 +191,7 @@ class MainActivity : Activity() {
                 }
                 is Launch.Action -> startActivity(Intent(launch.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 is Launch.Setting -> view.showOptions(settingOptions(launch.key))
+                is Launch.Shortcut -> launcherApps.startShortcut(launch.pkg, launch.id, null, null, launch.user)
                 is Launch.Ps3 -> {
                     val emulator = Ps3Library.emulator(packageManager)
                     if (emulator == null) Toast.makeText(this, "Install ARMSX3 to play PS3 games", Toast.LENGTH_LONG).show()
@@ -201,8 +213,22 @@ class MainActivity : Activity() {
     private fun optionsFor(item: XmbItem): XmbOptions? = when (val launch = item.payload) {
         is Launch.Setting -> settingOptions(launch.key)
         is Launch.Action, is Launch.Ps3 -> XmbOptions(listOf(OptionEntry("Open") { open(item) }))
+        is Launch.Shortcut -> XmbOptions(listOf(
+            OptionEntry("Open") { open(item) },
+            OptionEntry("Remove") {
+                Shortcuts.find(launcherApps, launch.pkg, launch.id, launch.user)?.let { Shortcuts.unpin(launcherApps, it) }
+                reload()
+            },
+        ))
         is Launch.App -> XmbOptions(buildList {
             add(OptionEntry("Open") { open(item) })
+            // The app's own shortcuts ("New tab", "Navigate home"...), as other launchers show them.
+            for (sc in Shortcuts.forApp(launcherApps, launch.component, launch.user)) {
+                add(OptionEntry((sc.shortLabel ?: sc.id).toString()) {
+                    runCatching { launcherApps.startShortcut(sc, null, null) }
+                        .onFailure { Toast.makeText(this@MainActivity, "Can't open that shortcut", Toast.LENGTH_SHORT).show() }
+                })
+            }
             add(OptionEntry("App Info") {
                 runCatching { launcherApps.startAppDetailsActivity(launch.component, launch.user, null, null) }
             })

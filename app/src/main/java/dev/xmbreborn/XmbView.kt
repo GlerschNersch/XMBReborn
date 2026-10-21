@@ -83,6 +83,16 @@ class XmbView(
         sfx.play(Sfx.Kind.OPTION)
     }
 
+    /** Back to a column's top row, closing any options (Home pressed while already home). */
+    fun goHome(categoryId: String) = renderer.post { r ->
+        cancelOptionsNow(r)
+        val m = r.model ?: return@post
+        val target = m.categories.indexOfFirst { it.id == categoryId }.takeIf { it >= 0 } ?: return@post
+        val movedColumn = m.setCategory(target)
+        val movedRow = m.focused.setFocus(0)
+        if (movedColumn || movedRow) sfx.play(Sfx.Kind.CANCEL)
+    }
+
     /** Closes the panel without a choice, if it's showing (e.g. on back). */
     fun cancelOptions() = renderer.post(::cancelOptionsNow)
 

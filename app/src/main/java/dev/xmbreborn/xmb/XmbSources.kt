@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.UserHandle
 import android.provider.Settings
 import dev.xmbreborn.BootChime
+import dev.xmbreborn.Shortcuts
 import java.text.Collator
 
 /** What opening an item does. */
@@ -19,6 +20,8 @@ sealed interface Launch {
     data class Action(val intent: Intent) : Launch
     /** One of the launcher's own settings; opening it shows its choices in the options panel. */
     data class Setting(val key: String) : Launch
+    /** A shortcut another app pinned to home, or one of an app's own shortcuts. */
+    data class Shortcut(val pkg: String, val id: String, val user: UserHandle) : Launch
     /** A PS3 game, opened in ARMSX3 by its title id. */
     data class Ps3(val titleId: String?, val file: String?) : Launch
 }
@@ -63,8 +66,9 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             XmbCategory("game", "Game", Glyph.GAME, games),
             XmbCategory("network", "Network", Glyph.NETWORK,
                 appsIn(ApplicationInfo.CATEGORY_SOCIAL, ApplicationInfo.CATEGORY_NEWS, ApplicationInfo.CATEGORY_MAPS)),
+            XmbCategory("shortcuts", "Shortcuts", Glyph.FOLDER, pinnedShortcuts(iconPx, apps)),
             XmbCategory("apps", "Apps", Glyph.APPS, apps.map { it.item }),
-        )
+        ).filter { it.id != "shortcuts" || it.items.isNotEmpty() }
     }
 
     private class LoadedApp(val item: XmbItem, val category: Int)
@@ -124,6 +128,18 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val id = "settings:$action"
         icons[id] = ItemIcon.Of(Glyph.SETTINGS)
         XmbItem(id, title, subtitle, Launch.Action(Intent(action)))
+    }
+
+    /** Shortcuts other apps pinned to home ("Add to Home screen"), titled with their app's name. */
+    private fun pinnedShortcuts(iconPx: Int, apps: List<LoadedApp>): List<XmbItem> {
+        val appNames = apps.associate { (it.item.payload as? Launch.App)?.component?.packageName to it.item.title }
+        val density = context.resources.displayMetrics.densityDpi
+        return Shortcuts.pinned(launcherApps).map { info ->
+            val id = "shortcut:${info.`package`}/${info.id}#${info.userHandle.hashCode()}"
+            val icon = runCatching { launcherApps.getShortcutBadgedIconDrawable(info, density) }.getOrNull()
+            icons[id] = icon?.let { ItemIcon.Bitmap(rasterize(it, iconPx)) } ?: ItemIcon.Of(Glyph.FOLDER)
+            XmbItem(id, (info.shortLabel ?: info.id).toString(), appNames[info.`package`], Launch.Shortcut(info.`package`, info.id, info.userHandle))
+        }
     }
 
     /** The user's PS3 games from ARMSX3's exported folder; none if it isn't set up. */
