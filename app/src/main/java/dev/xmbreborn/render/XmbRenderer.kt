@@ -56,6 +56,11 @@ class XmbRenderer : GLSurfaceView.Renderer {
     @Volatile var lastLayout: XmbLayout = layout
         private set
 
+    /** Where list labels must end (screen x), e.g. to leave room for a tray of cards; NaN = the screen edge. */
+    @Volatile var labelLimitX = Float.NaN
+    /** Scale for list labels, e.g. smaller while a tray beside the list leaves them less room. */
+    @Volatile var labelScale = 1f
+
     /** Height of the system bar over the top of the surface, so the clock stays below it. */
     var topInset = 0f
 
@@ -387,15 +392,16 @@ class XmbRenderer : GLSurfaceView.Renderer {
             else sprites.draw(tex.id, p.x - iconW / 2, p.y - iconH / 2, iconW, iconH, p.alpha * fade)
         }
 
-        val titleSize = M.ITEM_LABEL_SIZE * layout.unit
+        val titleSize = M.ITEM_LABEL_SIZE * layout.unit * labelScale
         val labelX = if (wide) p.x + iconW / 2 + M.GAME_LABEL_GAP * layout.unit else layout.labelX(p.x)
         val textX = labelX - TextureCache.padFor(titleSize) + if (shift) M.OPTIONS_LABEL_SHIFT * layout.unit * lift else 0f
         // Long names stop short of the screen's edge with an ellipsis. Measured from the focused
         // column's resting place, not this frame's x, so scrolling doesn't re-render labels.
-        val maxW = layout.width - layout.labelX(layout.anchorX) - M.LABEL_EDGE_MARGIN * layout.unit
+        val rightEdge = labelLimitX.takeIf { !it.isNaN() } ?: layout.width
+        val maxW = rightEdge - layout.labelX(layout.anchorX) - M.LABEL_EDGE_MARGIN * layout.unit
         val title = textures.text(item.title, titleSize, maxWidth = maxW)
         val textAlpha = p.alpha * fade * (1f - M.OPTIONS_LABEL_DIM * lift)
-        val sub = item.subtitle?.takeIf { p.focus > 0.01f }?.let { textures.text(it, M.ITEM_SUBTITLE_SIZE * layout.unit, maxWidth = maxW) }
+        val sub = item.subtitle?.takeIf { p.focus > 0.01f }?.let { textures.text(it, M.ITEM_SUBTITLE_SIZE * layout.unit * labelScale, maxWidth = maxW) }
         // Focused rows lift the title to make room for the subtitle under it.
         val titleY = if (sub != null) p.y - title.height * (0.5f + 0.35f * p.focus) else p.y - title.height / 2f
         sprites.draw(title.id, textX, titleY, title.width.toFloat(), title.height.toFloat(), textAlpha)

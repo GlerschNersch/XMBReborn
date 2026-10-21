@@ -37,7 +37,8 @@ import java.util.concurrent.Executors
  * Not part of release builds.
  */
 class WidgetLabActivity : Activity() {
-    private enum class Mode { DASHBOARD, BOARD, NATIVE }
+    private enum class Mode { DASHBOARD, BOARD, NATIVE, TRAY }
+    private var tray: WidgetLabTray? = null
 
     private lateinit var host: AppWidgetHost
     private val manager by lazy { AppWidgetManager.getInstance(this) }
@@ -48,6 +49,7 @@ class WidgetLabActivity : Activity() {
         val mode = when (intent.component?.className?.substringAfterLast('.')) {
             "WidgetLabBoard" -> Mode.BOARD
             "WidgetLabNative" -> Mode.NATIVE
+            "WidgetLabTray" -> Mode.TRAY
             else -> Mode.DASHBOARD
         }
         host = AppWidgetHost(this, HOST_ID)
@@ -75,6 +77,21 @@ class WidgetLabActivity : Activity() {
                 }
                 Mode.BOARD -> root.addView(gated(xmb, board(root.height), "new"))
                 Mode.NATIVE -> root.addView(gated(xmb, nativeInfo(root.height), "now"))
+                Mode.TRAY -> {
+                    val t = WidgetLabTray(this, xmb).also { tray = it }
+                    // Real widgets, chosen by kind so the same build works on any device.
+                    val w = t.cardWidthDp(root.width)
+                    root.addView(gated(xmb, t.realColumn(root.width, root.height, realWidgets(w, listOf(
+                        listOf("NowPlayingWidgetProvider", "MusicWidgetProvider", "FreeformMusicWidgetProvider"),
+                        listOf("FreeformMusicWidgetProvider", "MusicWidgetProvider"),
+                    ))), "music"))
+                    root.addView(gated(xmb, t.realColumn(root.width, root.height, realWidgets(w, listOf(
+                        listOf("OnePlusWidget", "OppoWeather", "DigitalAppWidgetProvider", "DigitalStackedAppWidgetProvider"),
+                        listOf("SmartspaceWidgetProvider"),
+                        listOf("MonthViewWidgetProvider", "CalendarAppWidgetProvider"),
+                    ))), "settings"))
+                    limitLabels(xmb, setOf("music", "settings"), t.left(root.width))
+                }
             }
         }
     }
@@ -125,16 +142,61 @@ class WidgetLabActivity : Activity() {
         android.view.Choreographer.getInstance().postFrameCallback(tick)
     }
 
+    /**
+     * Lays a widget out at a size it's happy with ([naturalW] x [naturalH] px) and scales it down
+     * to the width it's given, so a widget with a large minimum size shrinks instead of being cut
+     * off. Touches are mapped through the scale by Android.
+     */
+    private class Scaled(context: android.content.Context, private val naturalW: Int, private val naturalH: Int) : FrameLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            val childW = maxOf(w, naturalW)
+            val scale = w / childW.toFloat()
+            getChildAt(0)?.measure(MeasureSpec.makeMeasureSpec(childW, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(naturalH, MeasureSpec.EXACTLY))
+            setMeasuredDimension(w, (naturalH * scale).toInt())
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            val child = getChildAt(0) ?: return
+            child.layout(0, 0, child.measuredWidth, child.measuredHeight)
+            val scale = width / child.measuredWidth.toFloat()
+            child.pivotX = 0f; child.pivotY = 0f
+            child.scaleX = scale; child.scaleY = scale
+        }
+    }
+
     /** Lets touches through to the bar underneath while the overlay inside is faded out. */
     private class TouchGate(context: android.content.Context) : FrameLayout(context) {
         var passThrough = true
         override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean = !passThrough && super.dispatchTouchEvent(ev)
     }
 
+    /** While a column with a tray is focused, its list's labels end before the tray. */
+    private fun limitLabels(xmb: XmbView, columns: Set<String>, limit: Float) {
+        val tick = object : android.view.Choreographer.FrameCallback {
+            var limited = false
+            override fun doFrame(frameTimeNanos: Long) {
+                val ids = xmb.renderer.columnIds
+                val focused = ids.getOrNull(Math.round(xmb.renderer.barScroll))
+                val want = focused in columns
+                if (want != limited) {
+                    limited = want
+                    xmb.renderer.post {
+                        it.labelLimitX = if (want) limit else Float.NaN
+                        it.labelScale = if (want) 0.8f else 1f
+                    }
+                }
+                if (!isDestroyed) android.view.Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+        android.view.Choreographer.getInstance().postFrameCallback(tick)
+    }
+
     override fun onStart() { super.onStart(); host.startListening() }
     override fun onStop() { host.stopListening(); super.onStop() }
     override fun onDestroy() {
         boundIds.forEach(host::deleteAppWidgetId)
+        tray?.stop()
         super.onDestroy()
     }
 
@@ -150,6 +212,7 @@ class WidgetLabActivity : Activity() {
                 cats = listOf(XmbCategory("new", "What's New", Glyph.FOLDER, emptyList())) + cats
                 initial = 0
             }
+            if (mode == Mode.TRAY) initial = cats.indexOfFirst { it.id == "music" }
             if (mode == Mode.NATIVE) {
                 cats = listOf(XmbCategory("now", "Now", Glyph.MUSIC, emptyList())) + cats
                 initial = 0
@@ -168,6 +231,24 @@ class WidgetLabActivity : Activity() {
             "MonthViewWidgetProvider", "AnalogAppWidgetProvider", "TrafficWidgetProvider", "SearchWidgetProvider")
         val ordered = wanted.mapNotNull { w -> all.firstOrNull { it.provider.className.endsWith(w) } }
         return (ordered + (all - ordered.toSet())).take(n)
+    }
+
+    /**
+     * One real widget per group: the first provider (by class name, in preference order) that's
+     * installed and needs no configuration step, sized to the card. Each comes with its name and
+     * a height in dp from the widget's own preferred size.
+     */
+    private fun realWidgets(widthDp: Int, groups: List<List<String>>): List<Triple<CharSequence, View, Int>> {
+        val all = manager.installedProviders.filter { it.configure == null }
+        val used = HashSet<android.content.ComponentName>()
+        return groups.mapNotNull { names ->
+            val info = names.firstNotNullOfOrNull { n -> all.firstOrNull { it.provider.className.endsWith(n) && it.provider !in used } }
+                ?: return@mapNotNull null
+            used += info.provider
+            val hDp = (maxOf(info.minHeight, info.minResizeHeight) / resources.displayMetrics.density).toInt().coerceIn(96, 260)
+            val wDp = maxOf(widthDp, (info.minWidth / resources.displayMetrics.density).toInt())
+            Triple(info.loadLabel(packageManager), Scaled(this, dp(wDp), dp(hDp)).apply { addView(widget(info, wDp, hDp)) }, hDp)
+        }
     }
 
     private fun widget(info: AppWidgetProviderInfo, wDp: Int, hDp: Int): View {
