@@ -240,3 +240,25 @@ plus Android's settings in a folder of their own. The open-folder motion wasn't 
 slides the bar one column left per folder (`XmbMetrics.FOCUS_TIME_CONSTANT`, as the bar) and keeps
 the folder's icon in the focused row's line. In portrait the slide is capped so that icon stays
 on screen.
+
+## `qgl/canyon.qrc` and `qgl/earth.qrc` (not yet built)
+
+Both are separate animated scenes with their own shaders and plain-text `.mnu` parameters
+(`#MNU_1.0`, then `NAME:float:value` per line). `re/tools/mnu_table.py` gathers them into a table.
+
+- **Canyon:** 58 presets (`override_<name>_canyon_*.mnu`, e.g. `Bir_A01`…) over 47 parameters
+  in six groups:
+  - camera: position, target, speed, look-ahead time, zoom
+  - terrain: height, width, slide, X scale, bump; valley height, centre, width and sharpness
+  - a glowing line ahead of the camera: distance, width, height, length
+  - fog: near/far and colour
+  - colour grading: scale and bias, line colour
+  - feedback blur: focal depth and variance, feedback amount, scale and rotation
+
+  The terrain is shaped by a normal map (`canyon_normalmap.dds`). A clean-room version would
+  need our own procedural terrain.
+- **Earth:** a globe with atmosphere scattering tables (`atm__*.dump`), clouds, sun, HDR and
+  auto-exposure, several camera paths (`camera_4m_camera*.ini`, `camera.path`) and presets.
+
+Where the PS3 shows these isn't confirmed yet (themes, music visualizers, something else?). Next
+step: find them in RPCS3 and capture their motion, as we did for the wave.
