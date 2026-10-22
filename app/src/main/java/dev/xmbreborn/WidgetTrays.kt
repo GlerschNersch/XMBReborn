@@ -123,7 +123,8 @@ class WidgetTrays(
         // Beside a tray, the list makes room: labels end before it (smaller), or with a wide
         // tray, rows show icons only.
         val focused = focusedColumn()
-        val hasTray = focused != null && ids(focused).isNotEmpty()
+        // While options are open the tray has stepped aside, so the list gets its full width back.
+        val hasTray = focused != null && ids(focused).isNotEmpty() && !xmb.renderer.optionsShowing
         val state = if (!hasTray) "none" else "${left(focused!!)}:${wide(focused)}"
         if (state != listState) {
             listState = state

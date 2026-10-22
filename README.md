@@ -9,8 +9,8 @@ measured from the real interface, and everything in the app was written from tho
 **No Sony code, artwork, fonts or sounds are included.**
 
 <p align="center">
-  <img src="docs/screenshots/landscape.png" width="62%" alt="The bar in landscape: categories across, the Settings column down">
-  <img src="docs/screenshots/portrait.png" width="22%" alt="The bar in portrait">
+  <img src="docs/screenshots/landscape.png" width="62%" alt="The bar in landscape: categories across, the Music column with two widgets beside it">
+  <img src="docs/screenshots/portrait.png" width="22%" alt="The bar in portrait: the Network column with a search widget">
 </p>
 <p align="center">
   <img src="docs/screenshots/theme-color.png" width="62%" alt="The options panel choosing a theme colour, previewed live">
