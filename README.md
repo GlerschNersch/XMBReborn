@@ -32,8 +32,10 @@ Requires Android 10 or newer and OpenGL ES 3.
   open it. D-pads and game controllers work too: Ⓐ opens, Ⓑ goes back, Ⓨ/Menu opens options,
   and L1/R1 (or Page Up/Down) skip ten rows. On a keyboard, type a letter to jump to it.
 - **Long-press** a row (or press Ⓨ/Menu) for its options: Open, the app's own shortcuts (like
-  "New tab"), App Info, **Jump to Letter** (in long lists such as Apps), Add Widget Here, Hide,
-  Uninstall.
+  "New tab"), App Info, **Jump to Letter** (in long lists such as Apps), **New Folder** or
+  **Move to** one of your folders, Add Widget Here, Hide, Uninstall.
+- **Your own folders:** "New Folder" files the app into a folder in that column, and "Move to…"
+  adds more. Hold a folder to **Rename** or **Delete** it; deleting puts its apps back.
 - **Home** while you're already home glides back to the top of the Apps column.
 - **"Add to Home screen"** from other apps (Chrome, Maps…) puts the shortcut in a **Shortcuts**
   column.
@@ -51,11 +53,18 @@ Requires Android 10 or newer and OpenGL ES 3.
       status bar already shows the time.
   - **Sound Settings**
     - **Interface Sounds:** the menu clicks, plus a short tone when something works or fails.
+    - **Now Playing in Music:** shows what another app is playing at the top of Music, with
+      Play/Pause, Next and Previous in its options. Android only allows this with notification
+      access; this setting takes you to that switch.
     - **Ambient Sound:** a soft background pad of our own (the PS3 has none). It pauses whenever
       another app plays media.
     - **Startup Sound:** plays once after the phone powers on, if you've supplied a sound (see below).
   - **Home Settings**
     - **Widget Button:** hide the round **+** (Add Widget Here in options still works).
+    - **Photos and Videos:** your newest albums appear in the Photo and Video columns, as folders
+      of pictures and clips with thumbnails. It asks for Android's photo and video permission when
+      you turn it on.
+    - **Remove Widgets:** lists every widget on home, so you can take any of them off.
     - **Hidden Apps:** bring back apps you've hidden.
     - **Backup:** save your settings, hidden apps and recent order to a file, or restore them,
       e.g. on a new phone. Widgets and the PS3 folder aren't included; Android ties those to the
@@ -75,11 +84,13 @@ with its category, the way the lists do.
 
 - **Add:** tap the round **+** at the bottom right (or choose **Add Widget Here** in a row's
   options). This opens Android's widget list, plus the widget's own set-up screen if it has one.
+- **Remove:** drag a widget onto the **Remove** target that appears at the top. You can also
+  choose Remove in its menu, or use Settings → Home Settings → Remove Widgets.
 - **Move:** press and hold a widget until it lifts, then drag it up or down. In landscape, drag
   it across to the other stack. Hold it at the left or right edge of the screen to carry it to
   the next category.
-- **Arrange:** press and hold without moving to make it **Bigger** or **Smaller**, give the
-  category a **Wider Tray** (its list then shows icons only), or **Remove** it.
+- **Arrange:** press and hold without moving to **Remove** it, make it **Bigger** or **Smaller**,
+  or give the category a **Wider Tray** (its list then shows icons only).
 - Swiping sideways over a widget still changes category; taps and scrolling go to the widget.
 
 ## Playing PS3 games (optional, with ARMSX3)

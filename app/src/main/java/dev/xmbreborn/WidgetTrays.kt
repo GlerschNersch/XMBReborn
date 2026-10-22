@@ -184,6 +184,9 @@ class WidgetTrays(
             // stopped Android redrawing it). Touches pass through while it's hidden.
             holder.alpha = a
             holder.translationX = if (show) d * spacing else 0f
+            // Fully faded, it's hidden too, so TalkBack doesn't read another column's widgets.
+            val visibility = if (show) View.VISIBLE else View.INVISIBLE
+            if (holder.visibility != visibility) holder.visibility = visibility
             gate.passThrough = !show
         }
         // Beside a tray, the list makes room: labels end before it (smaller), or with a wide

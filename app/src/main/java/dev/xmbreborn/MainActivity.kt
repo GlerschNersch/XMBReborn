@@ -34,6 +34,7 @@ class MainActivity : Activity() {
     private lateinit var view: XmbView
     private lateinit var trays: WidgetTrays
     private lateinit var notice: Notice
+    private lateinit var nowPlaying: NowPlaying
     private lateinit var sfx: Sfx
     private lateinit var prefs: XmbPrefs
     private lateinit var sources: XmbSources
@@ -75,6 +76,15 @@ class MainActivity : Activity() {
         val root = android.widget.FrameLayout(this).apply { addView(view) }
         setContentView(root)
         notice = Notice(root, sfx)
+        val artPx = (XmbMetrics.ITEM_ICON_FOCUSED * minOf(resources.displayMetrics.widthPixels,
+            resources.displayMetrics.heightPixels) / XmbMetrics.REF_SHORT_SIDE).toInt().coerceAtLeast(48)
+        // A track change rebuilds the bar; bursts (metadata, then state, then art) become one.
+        val nowPlayingChanged = Runnable { sources.nowPlaying = nowPlaying.track; reload() }
+        nowPlaying = NowPlaying(this, artPx) {
+            window.decorView.removeCallbacks(nowPlayingChanged)
+            window.decorView.postDelayed(nowPlayingChanged, NOW_PLAYING_SETTLE_MS)
+        }
+        sources.nowPlayingAllowed = { nowPlaying.allowed }
         trays = WidgetTrays(this, root, view, notice) { prefs.widgetButton }
         view.requestFocus()
         view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale }
@@ -110,8 +120,8 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
-    override fun onStart() { super.onStart(); trays.start() }
-    override fun onStop() { trays.stop(); super.onStop() }
+    override fun onStart() { super.onStart(); trays.start(); nowPlaying.start() }
+    override fun onStop() { trays.stop(); nowPlaying.stop(); super.onStop() }
 
     override fun onDestroy() {
         trays.release()
@@ -210,6 +220,7 @@ class MainActivity : Activity() {
                 is Launch.Action -> startActivity(Intent(launch.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 is Launch.Setting -> view.showOptions(settingOptions(launch.key))
                 is Launch.Shortcut -> launcherApps.startShortcut(launch.pkg, launch.id, null, null, launch.user)
+                is Launch.NowPlaying -> if (!nowPlaying.open()) notice.show("Can't open the player", ok = false)
                 is Launch.Media -> startActivity(Intent(Intent.ACTION_VIEW)
                     .setDataAndType(Uri.parse(launch.uri), if (launch.video) "video/*" else "image/*")
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -241,6 +252,12 @@ class MainActivity : Activity() {
                 reload()
             },
             addWidgetEntry(),
+        ))
+        is Launch.NowPlaying -> XmbOptions(listOf(
+            OptionEntry(if (nowPlaying.track?.playing == true) "Pause" else "Play") { nowPlaying.playPause() },
+            OptionEntry("Next") { nowPlaying.next() },
+            OptionEntry("Previous") { nowPlaying.previous() },
+            OptionEntry("Open Player") { open(item) },
         ))
         is Launch.UserFolder -> XmbOptions(listOf(
             OptionEntry("Open") { view.openFocused() },
@@ -429,6 +446,18 @@ class MainActivity : Activity() {
         XmbSources.SETTING_WALLPAPER -> XmbOptions(listOf(
             OptionEntry(if (sources.wallpaperIsOurs()) "Set Again" else "Use XMB Wallpaper") { chooseXmbWallpaper() },
         ))
+        // Notification access can only be granted in Android's settings; this takes the user there.
+        XmbSources.SETTING_NOW_PLAYING -> XmbOptions(listOf(OptionEntry(if (nowPlaying.allowed) "Turn Off in Android Settings" else "Turn On in Android Settings") {
+            val intent = if (android.os.Build.VERSION.SDK_INT >= 30)
+                Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                        ComponentName(this, NowPlayingListener::class.java).flattenToString())
+            else Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            runCatching { startActivity(intent) }.onFailure {
+                runCatching { startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            }
+            reorderOnResume = true // the new state shows on return
+        }))
         XmbSources.SETTING_MEDIA -> onOff(sources.mediaAllowed()) { on ->
             if (!on) { prefs.media = false; reload() } else requestMedia()
         }
@@ -572,6 +601,7 @@ class MainActivity : Activity() {
     private companion object {
         const val REQUEST_PS3_FOLDER = 31
         const val REQUEST_MEDIA = 34
+        const val NOW_PLAYING_SETTLE_MS = 250L
         /** Columns of apps, where folders can be made (not Settings or Shortcuts). */
         val FOLDER_COLUMNS = setOf("photo", "music", "video", "game", "network", "apps")
         /** "Move to" entries offered at most, so the panel stays short. */

@@ -61,6 +61,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Lets the user grant notification access, which Android requires before an app may
+             see what other apps are playing (the Now Playing row in Music). -->
+        <service
+            android:name=".NowPlayingListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- The XMB background as a live wallpaper (Settings > Wallpaper). In its own process, so
              its GL never competes with the launcher's while either starts, and a wallpaper fault
              can't take home down with it. -->

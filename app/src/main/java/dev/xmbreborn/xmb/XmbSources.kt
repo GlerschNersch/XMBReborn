@@ -24,6 +24,8 @@ sealed interface Launch {
     data class Shortcut(val pkg: String, val id: String, val user: UserHandle) : Launch
     /** A PS3 game, opened in ARMSX3 by its title id. */
     data class Ps3(val titleId: String?, val file: String?) : Launch
+    /** The track another app is playing (the Now Playing row). */
+    data object NowPlaying : Launch
     /** A photo or video from the phone's albums, opened in whichever app shows it. */
     data class Media(val uri: String, val video: Boolean) : Launch
     /** One of the user's own folders of apps in [column]; opening it shows them. */
@@ -48,6 +50,17 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     val backgrounds = HashMap<String, Ps3Library.Pic1>()
 
     private val iconCache = IconCache(context)
+
+    /** What another app is playing, for the top of Music; set by the activity, null if nothing. */
+    @Volatile var nowPlaying: dev.xmbreborn.NowPlaying.Track? = null
+
+    private fun nowPlayingRow(): List<XmbItem> {
+        val t = nowPlaying ?: return emptyList()
+        val id = "nowplaying"
+        icons[id] = t.art?.let { ItemIcon.Bitmap(it) } ?: ItemIcon.Of(Glyph.MUSIC)
+        val state = if (t.playing) "Now Playing" else "Paused"
+        return listOf(XmbItem(id, t.title, listOfNotNull(state, t.artist).joinToString(" · "), Launch.NowPlaying))
+    }
     val userFolders = UserFolders(context)
 
     /** [items] for [column] with the user's folders gathered in; [byName] re-sorts A-Z (Apps). */
@@ -74,6 +87,9 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     /** True if the last [build] left photo thumbnails out (not drawn yet); build again to fill them in. */
     @Volatile var thumbnailsPending = false
         private set
+
+    /** Set by the activity: whether notification access (needed for Now Playing) is granted. */
+    @Volatile var nowPlayingAllowed: () -> Boolean = { false }
 
     /** Whether albums can show: the setting is on and Android has granted access to photos/videos. */
     fun mediaAllowed(): Boolean {
@@ -108,7 +124,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         return listOf(
             XmbCategory("settings", "Settings", Glyph.SETTINGS, settings),
             XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn("photo", ApplicationInfo.CATEGORY_IMAGE) + photoAlbums),
-            XmbCategory("music", "Music", Glyph.MUSIC, appsIn("music", ApplicationInfo.CATEGORY_AUDIO)),
+            XmbCategory("music", "Music", Glyph.MUSIC, nowPlayingRow() + appsIn("music", ApplicationInfo.CATEGORY_AUDIO)),
             XmbCategory("video", "Video", Glyph.VIDEO, appsIn("video", ApplicationInfo.CATEGORY_VIDEO) + videoAlbums),
             XmbCategory("game", "Game", Glyph.GAME, foldered("game", games)),
             XmbCategory("network", "Network", Glyph.NETWORK,
@@ -165,6 +181,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             folder("sound", "Sound Settings", "Menu sounds, ambient pad and startup sound", Glyph.SPEAKER, listOf(
                 setting(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds), Glyph.SPEAKER),
                 setting(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient), Glyph.MUSIC),
+                setting(SETTING_NOW_PLAYING, "Now Playing in Music", onOff(nowPlayingAllowed()), Glyph.MUSIC),
                 setting(SETTING_CHIME, "Startup Sound", if (BootChime.file(context) == null) "No sound file" else onOff(prefs.chime), Glyph.SPEAKER),
             )),
             folder("home", "Home Settings", "Widgets, hidden apps and backup", Glyph.HOME, listOf(
@@ -319,6 +336,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_BACKUP = "backup"
         const val SETTING_REMOVE_WIDGETS = "removeWidgets"
         const val SETTING_MEDIA = "media"
+        const val SETTING_NOW_PLAYING = "nowPlaying"
         const val SETTING_CLOCK = "clock"
         const val SETTING_SIZE = "size"
         const val SETTING_WALLPAPER = "wallpaper"

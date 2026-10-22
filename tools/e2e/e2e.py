@@ -203,6 +203,7 @@ FOLDER_OF = {
     "Wallpaper": "Theme Settings", "Date and Time": "Theme Settings",
     "Interface Sounds": "Sound Settings", "Ambient Sound": "Sound Settings", "Startup Sound": "Sound Settings",
     "Widget Button": "Home Settings", "Hidden Apps": "Home Settings", "Backup": "Home Settings",
+    "Remove Widgets": "Home Settings", "Photos and Videos": "Home Settings", "Now Playing in Music": "Sound Settings",
 }
 
 
@@ -518,6 +519,86 @@ def test_text_size(d):
     check(abs(row_height(d) - large) <= 2, "Large didn't restore the row size")
 
 
+def long_press_focused(d):
+    row = next(n for n in d.nodes() if not n.category and n.selected and n.text != "+")
+    d.sh(f"input motionevent DOWN {row.center[0]} {row.center[1]}; sleep 1; input motionevent UP {row.center[0]} {row.center[1]}")
+    time.sleep(1.3)
+
+
+def tap_node(d, text, settle=1.3):
+    n = next((n for n in d.nodes() if n.text == text), None)
+    check(n is not None, f"no {text!r} on screen: {[n.text for n in d.nodes()][:20]}")
+    d.sh(f"input tap {n.center[0]} {n.center[1]}")
+    time.sleep(settle)
+
+
+def test_user_folder(d):
+    """An app's options make a folder of it; inside, Remove from Folder empties it and it goes."""
+    d.go_column("Network")
+    d.keys("BACK", "BACK", pause=0.8)
+    d.to_top()
+    first = d.selected()[1]
+    long_press_focused(d)
+    tap_node(d, "New Folder", settle=2.5)
+    rows = [n.text for n in d.nodes() if not n.category and n.text != "+"]
+    folder = next((r for r in rows if r.startswith("New Folder")), None)
+    check(folder is not None and "1 app" in folder, f"no folder row: {rows}")
+    check(not any(r.split(",")[0] == first.split(",")[0] for r in rows if r != folder), f"{first} still outside the folder")
+    walk_to(d, "New Folder")
+    d.keys("ENTER", pause=1.4)
+    check(any(n.text == "Back to New Folder" for n in d.nodes()), "folder didn't open")
+    check((d.selected()[1] or "").split(",")[0] == first.split(",")[0], "folder doesn't hold the app")
+    long_press_focused(d)
+    tap_node(d, "Remove from Folder", settle=2.5)
+    rows = [n.text for n in d.nodes() if not n.category and n.text != "+"]
+    check(not any(r.startswith("New Folder") for r in rows) and not any(n.text.startswith("Back to") for n in d.nodes()),
+          f"empty folder still there: {rows}")
+
+
+def add_widget(d, column, name):
+    """Adds widget [name] to [column] with the + button and the system's widget list."""
+    d.go_column(column)
+    tap_node(d, "+", settle=2.5)
+    picker_tap(d, name)
+    time.sleep(3)
+    check(d.foreground(), "didn't come back from the widget list")
+
+
+def widget_cards(d):
+    out = d.sh("uiautomator dump /sdcard/xmb_e2e.xml >/dev/null && cat /sdcard/xmb_e2e.xml")
+    return re.findall(r'content-desc="([^"]*)\. Press and hold to move or arrange"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', out)
+
+
+def test_remove_widget_by_drag(d):
+    """Dragging a widget onto the Remove target that appears at the top takes it off home."""
+    before = len(widget_cards(d))
+    add_widget(d, "Game", "Analog")
+    cards = widget_cards(d)
+    check(len(cards) >= 1, "the new widget isn't showing")
+    title, x1, y1, x2, y2 = cards[0]
+    cx, cy = (int(x1) + int(x2)) // 2, (int(y1) + int(y2)) // 2
+    # Lift it, carry it to the top centre, hold, let go.
+    top_x = int(d.sh("wm size").split()[-1].split("x")[0]) // 2
+    d.sh(f"input motionevent DOWN {cx} {cy}; sleep 1; " + "; ".join(
+        f"input motionevent MOVE {cx + (top_x - cx) * k // 6} {cy + (200 - cy) * k // 6}" for k in range(1, 7)) +
+        f"; sleep 0.4; input motionevent UP {top_x} 200")
+    time.sleep(2)
+    check(not widget_cards(d), f"widget still on Game after dropping on Remove ({widget_cards(d)})")
+
+
+def test_settings_rows(d):
+    """The new Home and Sound settings are there: Remove Widgets lists widgets; Now Playing and media rows exist."""
+    focus_setting(d, "Remove Widgets")
+    d.keys("ENTER", pause=1.4)
+    entries = [n.text for n in d.nodes() if n.text != "+"]
+    check(any("(" in e and e.endswith(")") for e in entries) or "No widgets on home" in entries, f"odd Remove Widgets list: {entries}")
+    d.keys("BACK", pause=1)
+    focus_setting(d, "Photos and Videos")
+    check(setting_value(d, "Photos and Videos") in ("On", "Off"), "no Photos and Videos value")
+    focus_setting(d, "Now Playing in Music")
+    check(setting_value(d, "Now Playing in Music") in ("On", "Off"), "no Now Playing value")
+
+
 # Any small launchable APK works; TSF Reborn's test app is the one on hand.
 FIXTURE_APK = os.environ.get("XMB_FIXTURE_APK", os.path.join(os.path.dirname(REPO), "TSFReborn", "testkit",
                              "build", "outputs", "apk", "debug", "testkit-debug.apk"))
@@ -562,7 +643,7 @@ def test_no_crash(d):
 
 
 TESTS = [test_tree, test_folders, test_options_tree, test_dpad, test_fling, test_fling_catch, test_a11y_click, test_home,
-         test_widget_button_setting, test_jump_to_letter, test_letter_keys, test_long_panel_scrolls, test_backup_round_trip, test_clock_setting, test_text_size, test_wallpaper_setting, test_apps_live, test_landscape, test_no_crash]
+         test_widget_button_setting, test_jump_to_letter, test_letter_keys, test_long_panel_scrolls, test_backup_round_trip, test_clock_setting, test_text_size, test_wallpaper_setting, test_user_folder, test_remove_widget_by_drag, test_settings_rows, test_apps_live, test_landscape, test_no_crash]
 
 
 def main():
