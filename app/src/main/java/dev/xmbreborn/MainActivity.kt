@@ -16,7 +16,6 @@ import android.os.Handler
 import android.os.UserHandle
 import android.util.Log
 import android.view.WindowManager
-import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import dev.xmbreborn.xmb.Launch
 import dev.xmbreborn.xmb.MonthPalette
@@ -34,6 +33,7 @@ import java.util.concurrent.Executors
 class MainActivity : Activity() {
     private lateinit var view: XmbView
     private lateinit var trays: WidgetTrays
+    private lateinit var notice: Notice
     private lateinit var sfx: Sfx
     private lateinit var prefs: XmbPrefs
     private lateinit var sources: XmbSources
@@ -74,13 +74,14 @@ class MainActivity : Activity() {
         view = XmbView(this, sfx, ::open, ::optionsFor)
         val root = android.widget.FrameLayout(this).apply { addView(view) }
         setContentView(root)
-        trays = WidgetTrays(this, root, view) { prefs.widgetButton }
+        notice = Notice(root, sfx)
+        trays = WidgetTrays(this, root, view, notice) { prefs.widgetButton }
         view.requestFocus()
         view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale }
         view.renderer.onWantBackground = { id -> loader.execute { loadGameBackground(id) } }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Home ignores back, except to close the options panel.
-            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { view.cancelOptions() }
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { view.back() }
         }
         launcherApps.registerCallback(appsChanged)
         audio.registerAudioPlaybackCallback(playbackWatch, Handler(mainLooper))
@@ -146,10 +147,10 @@ class MainActivity : Activity() {
         if (Intent.ACTION_MAIN == intent.action && intent.hasCategory(Intent.CATEGORY_HOME) && alreadyHome) view.goHome("apps")
     }
 
-    /** Home is already showing; back only closes the options panel. */
+    /** Home is already showing; back closes the options panel or an open folder, nothing more. */
     @Deprecated("Launcher ignores back")
     override fun onBackPressed() {
-        view.cancelOptions()
+        view.back()
     }
 
     private fun reload() {
@@ -203,7 +204,7 @@ class MainActivity : Activity() {
                 is Launch.Shortcut -> launcherApps.startShortcut(launch.pkg, launch.id, null, null, launch.user)
                 is Launch.Ps3 -> {
                     val emulator = Ps3Library.emulator(packageManager)
-                    if (emulator == null) Toast.makeText(this, "Install ARMSX3 to play PS3 games", Toast.LENGTH_LONG).show()
+                    if (emulator == null) notice.show("Install ARMSX3 to play PS3 games", ok = false)
                     else {
                         Ps3Library.launch(this, emulator, launch.titleId, launch.file?.let(Uri::parse))
                         prefs.markOpened(item.id)
@@ -212,9 +213,9 @@ class MainActivity : Activity() {
                 }
             }
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "Can't open ${item.title}", Toast.LENGTH_SHORT).show()
+            notice.show("Can't open ${item.title}", ok = false)
         } catch (e: SecurityException) {
-            Toast.makeText(this, "Can't open ${item.title}", Toast.LENGTH_SHORT).show()
+            notice.show("Can't open ${item.title}", ok = false)
         }
     }
 
@@ -236,7 +237,7 @@ class MainActivity : Activity() {
             for (sc in Shortcuts.forApp(launcherApps, launch.component, launch.user)) {
                 add(OptionEntry((sc.shortLabel ?: sc.id).toString()) {
                     runCatching { launcherApps.startShortcut(sc, null, null) }
-                        .onFailure { Toast.makeText(this@MainActivity, "Can't open that shortcut", Toast.LENGTH_SHORT).show() }
+                        .onFailure { notice.show("Can't open that shortcut", ok = false) }
                 })
             }
             add(OptionEntry("App Info") {
@@ -284,7 +285,7 @@ class MainActivity : Activity() {
         try {
             startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "Can't uninstall ${item.title}", Toast.LENGTH_SHORT).show()
+            notice.show("Can't uninstall ${item.title}", ok = false)
         }
     }
 
@@ -359,7 +360,7 @@ class MainActivity : Activity() {
             startActivity(intent)
             reorderOnResume = true // refresh the setting's "XMB Reborn" / "Not set" on return
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "This phone can't set live wallpapers", Toast.LENGTH_SHORT).show()
+            notice.show("This phone can't set live wallpapers", ok = false)
         }
     }
 
@@ -387,7 +388,7 @@ class MainActivity : Activity() {
             @Suppress("DEPRECATION")
             startActivityForResult(intent, request)
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "No file picker on this device", Toast.LENGTH_SHORT).show()
+            notice.show("No file picker on this device", ok = false)
         }
     }
 
@@ -404,7 +405,7 @@ class MainActivity : Activity() {
             }
         }
         val message = result.getOrElse { e -> (e as? IllegalArgumentException)?.message ?: "Couldn't read or write that file" }
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        notice.show(message, ok = result.isSuccess)
     }
 
     /** After a restore: every setting takes effect at once, as if chosen one by one. */
@@ -423,7 +424,7 @@ class MainActivity : Activity() {
             @Suppress("DEPRECATION")
             startActivityForResult(pick, REQUEST_PS3_FOLDER)
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "No folder picker on this device", Toast.LENGTH_SHORT).show()
+            notice.show("No folder picker on this device", ok = false)
         }
     }
 

@@ -1,7 +1,6 @@
 package dev.xmbreborn
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -19,8 +18,9 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import dev.xmbreborn.xmb.OptionEntry
 import dev.xmbreborn.xmb.XmbMetrics
+import dev.xmbreborn.xmb.XmbOptions
 import kotlin.math.abs
 
 /**
@@ -36,6 +36,7 @@ class WidgetTrays(
     private val activity: Activity,
     private val root: FrameLayout,
     private val xmb: XmbView,
+    private val notice: Notice,
     /** Whether the "+" button shows (Settings, Widget Button); Add Widget Here in options always works. */
     private val showButton: () -> Boolean = { true },
 ) {
@@ -110,7 +111,8 @@ class WidgetTrays(
         button.visibility = if (showButton()) View.VISIBLE else View.GONE
         for ((column, holder) in holders) {
             val index = ids.indexOf(column)
-            val d = if (index < 0) 99f else index - xmb.renderer.barScroll
+            // Slides and fades with the bar, including its move left into an open folder.
+            val d = if (index < 0) 99f else index - xmb.renderer.barScroll - xmb.renderer.folderShift
             val a = (1f - abs(d) * XmbMetrics.ROW_FADE_RATE).coerceIn(0f, 1f) * optionsAlpha
             val show = a > 0.01f && holder.childCount > 0
             val gate = holder.parent as Gate
@@ -200,7 +202,7 @@ class WidgetTrays(
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingId), REQ_PICK)
         } catch (e: Exception) {
             host.deleteAppWidgetId(pendingId); clearPending()
-            Toast.makeText(activity, "No widget picker on this phone", Toast.LENGTH_SHORT).show()
+            notice.show("No widget picker on this phone", ok = false)
         }
     }
 
@@ -218,7 +220,7 @@ class WidgetTrays(
             // The widget's own set-up first (which city a weather widget shows, and so on).
             runCatching { host.startAppWidgetConfigureActivityForResult(activity, id, 0, REQ_CONFIGURE, null) }
                 .onFailure {
-                    Toast.makeText(activity, "That widget's set-up couldn't open", Toast.LENGTH_SHORT).show()
+                    notice.show("That widget's set-up couldn't open", ok = false)
                     host.deleteAppWidgetId(id); clearPending()
                 }
             return true
@@ -244,16 +246,10 @@ class WidgetTrays(
                 prefs.edit().putBoolean("wide:$column", !wide(column)).apply()
                 listState = ""
             })
-            add("Remove" to { host.deleteAppWidgetId(id); save(column, ids - id) })
+            add("Remove $name" to { host.deleteAppWidgetId(id); save(column, ids - id) })
         }
-        AlertDialog.Builder(activity)
-            .setTitle(name)
-            .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
-                actions[which].second()
-                refill(column)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        // In the XMB's own options panel, like every other row's options; Back cancels.
+        xmb.showOptions(XmbOptions(actions.map { (label, action) -> OptionEntry(label) { action(); refill(column) } }))
     }
 
     private fun ids(column: String): List<Int> =

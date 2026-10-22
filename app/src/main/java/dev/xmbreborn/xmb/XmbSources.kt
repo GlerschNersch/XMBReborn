@@ -77,13 +77,16 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val self = context.packageName
         val collator = Collator.getInstance()
         val out = ArrayList<LoadedApp>()
+        val recent = prefs.recent
+        val now = System.currentTimeMillis()
         for (user in launcherApps.profiles) {
             for (info in launcherApps.getActivityList(null, user)) {
                 val component = info.componentName
                 if (component.packageName == self) continue
                 val id = "app:${component.flattenToShortString()}#${user.hashCode()}"
                 icons[id] = ItemIcon.Bitmap(rasterize(info.getBadgedIcon(0), iconPx))
-                val item = XmbItem(id, info.label.toString(), null, Launch.App(component, user))
+                // The focused row's info line, as the PS3 shows under a game: when it was last used.
+                val item = XmbItem(id, info.label.toString(), recent[id]?.let { lastOpened(it, now) }, Launch.App(component, user))
                 out.add(LoadedApp(item, info.applicationInfo.category))
             }
         }
@@ -93,45 +96,61 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         return out.filter { it.item.id !in hidden }
     }
 
-    /** The Settings column: our Theme and Sound settings first, then shortcuts into Android's. */
-    fun settingsItems(): List<XmbItem> = launcherSettings() + systemSettings()
-
-    private fun launcherSettings(): List<XmbItem> {
+    /**
+     * The Settings column, in folders as on the PS3 (Theme Settings, Sound Settings...), with
+     * Android's own settings gathered in one folder at the end.
+     */
+    fun settingsItems(): List<XmbItem> {
         val color = prefs.color.let { if (it == XmbPrefs.ORIGINAL) "Original" else MonthPalette.NAMES[it] }
         fun onOff(v: Boolean) = if (v) "On" else "Off"
         return listOf(
-            Triple(SETTING_COLOR, "Theme Color", color),
-            Triple(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient)),
-            Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
-            Triple(SETTING_PS3, "PS3 Games", ps3Status()),
-            Triple(SETTING_CHIME, "Startup Sound", if (BootChime.file(context) == null) "No sound file" else onOff(prefs.chime)),
-            Triple(SETTING_SIZE, "Text and Icon Size", XmbPrefs.SIZE_NAMES[prefs.size]),
-            Triple(SETTING_WIDGET_BUTTON, "Widget Button", onOff(prefs.widgetButton)),
-            Triple(SETTING_CLOCK, "Date and Time", onOff(prefs.clock)),
-            Triple(SETTING_WALLPAPER, "Wallpaper", if (wallpaperIsOurs()) "XMB Reborn" else "Not set"),
-            Triple(SETTING_BACKUP, "Backup", "Save or restore settings"),
-            Triple(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }),
-        ).map { (key, title, value) ->
-            val id = "setting:$key"
-            icons[id] = ItemIcon.Of(Glyph.SETTINGS)
-            XmbItem(id, title, value, Launch.Setting(key))
-        }
+            folder("theme", "Theme Settings", "Colour, size, wallpaper and clock", Glyph.PALETTE, listOf(
+                setting(SETTING_COLOR, "Theme Color", color, Glyph.PALETTE),
+                setting(SETTING_SIZE, "Text and Icon Size", XmbPrefs.SIZE_NAMES[prefs.size], Glyph.TEXT),
+                setting(SETTING_WALLPAPER, "Wallpaper", if (wallpaperIsOurs()) "XMB Reborn" else "Not set", Glyph.PHOTO),
+                setting(SETTING_CLOCK, "Date and Time", onOff(prefs.clock), Glyph.CLOCK),
+            )),
+            folder("sound", "Sound Settings", "Menu sounds, ambient pad and startup sound", Glyph.SPEAKER, listOf(
+                setting(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds), Glyph.SPEAKER),
+                setting(SETTING_AMBIENT, "Ambient Sound", onOff(prefs.ambient), Glyph.MUSIC),
+                setting(SETTING_CHIME, "Startup Sound", if (BootChime.file(context) == null) "No sound file" else onOff(prefs.chime), Glyph.SPEAKER),
+            )),
+            folder("home", "Home Settings", "Widgets, hidden apps and backup", Glyph.HOME, listOf(
+                setting(SETTING_WIDGET_BUTTON, "Widget Button", onOff(prefs.widgetButton), Glyph.WIDGETS),
+                setting(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }, Glyph.HIDDEN),
+                setting(SETTING_BACKUP, "Backup", "Save or restore settings", Glyph.BACKUP),
+            )),
+            setting(SETTING_PS3, "PS3 Games", ps3Status(), Glyph.GAME),
+            folder("android", "Android Settings", "Wi-Fi, Bluetooth, display and more", Glyph.DEVICE, systemSettings()),
+        )
+    }
+
+    private fun setting(key: String, title: String, value: String, glyph: Glyph): XmbItem {
+        val id = "setting:$key"
+        icons[id] = ItemIcon.Of(glyph)
+        return XmbItem(id, title, value, Launch.Setting(key))
+    }
+
+    private fun folder(key: String, title: String, subtitle: String, glyph: Glyph, children: List<XmbItem>): XmbItem {
+        val id = "folder:$key"
+        icons[id] = ItemIcon.Of(glyph)
+        return XmbItem(id, title, subtitle, children = children)
     }
 
     private fun systemSettings(): List<XmbItem> = listOf(
-        Triple("All Settings", "Every system setting", Settings.ACTION_SETTINGS),
-        Triple("Network Settings", "Wi-Fi and internet", Settings.ACTION_WIRELESS_SETTINGS),
-        Triple("Bluetooth Settings", "Controllers, audio and other accessories", Settings.ACTION_BLUETOOTH_SETTINGS),
-        Triple("Display Settings", "Brightness, theme and screen", Settings.ACTION_DISPLAY_SETTINGS),
-        Triple("Sound Settings", "Volume and tones", Settings.ACTION_SOUND_SETTINGS),
-        Triple("Power Save Settings", "Battery use", Intent.ACTION_POWER_USAGE_SUMMARY),
-        Triple("Date and Time Settings", "Clock and time zone", Settings.ACTION_DATE_SETTINGS),
-        Triple("Application Settings", "Installed apps", Settings.ACTION_APPLICATION_SETTINGS),
-        Triple("Home Screen", "Choose the default launcher", Settings.ACTION_HOME_SETTINGS),
-        Triple("System Information", "About this device", Settings.ACTION_DEVICE_INFO_SETTINGS),
-    ).map { (title, subtitle, action) ->
+        SystemSetting("All Settings", "Every system setting", Settings.ACTION_SETTINGS, Glyph.SETTINGS),
+        SystemSetting("Network Settings", "Wi-Fi and internet", Settings.ACTION_WIRELESS_SETTINGS, Glyph.WIFI),
+        SystemSetting("Bluetooth Settings", "Controllers, audio and other accessories", Settings.ACTION_BLUETOOTH_SETTINGS, Glyph.BLUETOOTH),
+        SystemSetting("Display Settings", "Brightness, theme and screen", Settings.ACTION_DISPLAY_SETTINGS, Glyph.BRIGHTNESS),
+        SystemSetting("Sound Settings", "Volume and tones", Settings.ACTION_SOUND_SETTINGS, Glyph.SPEAKER),
+        SystemSetting("Power Save Settings", "Battery use", Intent.ACTION_POWER_USAGE_SUMMARY, Glyph.BATTERY),
+        SystemSetting("Date and Time Settings", "Clock and time zone", Settings.ACTION_DATE_SETTINGS, Glyph.CLOCK),
+        SystemSetting("Application Settings", "Installed apps", Settings.ACTION_APPLICATION_SETTINGS, Glyph.APPS),
+        SystemSetting("Home Screen", "Choose the default launcher", Settings.ACTION_HOME_SETTINGS, Glyph.HOME),
+        SystemSetting("System Information", "About this device", Settings.ACTION_DEVICE_INFO_SETTINGS, Glyph.INFO),
+    ).map { (title, subtitle, action, glyph) ->
         val id = "settings:$action"
-        icons[id] = ItemIcon.Of(Glyph.SETTINGS)
+        icons[id] = ItemIcon.Of(glyph)
         XmbItem(id, title, subtitle, Launch.Action(Intent(action)))
     }
 
@@ -186,6 +205,19 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         fun byRecency(items: List<XmbItem>, recent: Map<String, Long>): List<XmbItem> =
             items.sortedByDescending { recent[it.id] ?: Long.MIN_VALUE }
 
+        /** "Opened today", "Opened yesterday", "Opened Oct 18", or with the year if it isn't this one. */
+        fun lastOpened(at: Long, now: Long, zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+                       locale: java.util.Locale = java.util.Locale.getDefault()): String {
+            val day = java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
+            val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+            return when {
+                day == today -> "Opened today"
+                day == today.minusDays(1) -> "Opened yesterday"
+                day.year == today.year -> "Opened " + day.format(java.time.format.DateTimeFormatter.ofPattern("MMM d", locale))
+                else -> "Opened " + day.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy", locale))
+            }
+        }
+
         const val SETTING_COLOR = "color"
         const val SETTING_AMBIENT = "ambient"
         const val SETTING_SOUNDS = "sounds"
@@ -206,3 +238,6 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         return bmp
     }
 }
+
+/** One shortcut into Android's own settings. */
+private data class SystemSetting(val title: String, val subtitle: String, val action: String, val glyph: Glyph)

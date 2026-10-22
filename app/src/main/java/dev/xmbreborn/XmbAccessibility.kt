@@ -19,7 +19,7 @@ import dev.xmbreborn.xmb.Placement
  * While the options panel is open only its rows are exposed, as it takes all input then.
  *
  * Virtual ids: category icons are `c`, rows are `CATEGORY_STRIDE + c * CATEGORY_STRIDE + i`,
- * option rows are `OPTION_BASE + i`.
+ * option rows are `OPTION_BASE + i`, an open folder's breadcrumb is `CRUMB_BASE + depth`.
  */
 class XmbAccessibility(
     private val host: View,
@@ -30,16 +30,23 @@ class XmbAccessibility(
     private val showOptions: (category: Int, item: Int) -> Unit,
     /** Chooses row [index] of the open options panel. */
     private val chooseOption: (index: Int) -> Unit,
+    /** Goes back up to [depth] folders deep (clicking a breadcrumb). */
+    private val closeFolder: (depth: Int) -> Unit,
 ) : AccessibilityNodeProvider() {
     private var hovered = View.NO_ID
 
-    private fun idOf(p: Placement) = if (p.item < 0) p.category else CATEGORY_STRIDE + p.category * CATEGORY_STRIDE + p.item
+    private fun idOf(p: Placement) = when {
+        p.isCrumb -> CRUMB_BASE + p.crumb
+        p.isCategory -> p.category
+        else -> CATEGORY_STRIDE + p.category * CATEGORY_STRIDE + p.item
+    }
 
     private fun placement(id: Int): Placement? = renderer.lastPlacements.firstOrNull { idOf(it) == id && it.alpha > MIN_ALPHA }
 
     private fun title(p: Placement): String? {
         val cat = renderer.model?.categories?.getOrNull(p.category) ?: return null
-        if (p.item < 0) return cat.title
+        if (p.isCrumb) return cat.crumbs.getOrNull(p.crumb)?.title?.let { "Back to $it" }
+        if (p.isCategory) return cat.title
         val item = cat.items.getOrNull(p.item) ?: return null
         return listOfNotNull(item.title, item.subtitle).joinToString(", ")
     }
@@ -60,23 +67,23 @@ class XmbAccessibility(
         val p = placement(virtualViewId) ?: return null
         val model = renderer.model
         val focusedHere = model != null && p.category == model.focus &&
-            (p.item < 0 || p.item == model.categories[p.category].focus)
+            (p.isCategory || p.item == model.categories[p.category].focus)
         return AccessibilityNodeInfo.obtain(host, virtualViewId).apply {
             setParent(host)
             packageName = host.context.packageName
-            className = if (p.item < 0) "android.widget.Tab" else "android.widget.Button"
+            className = if (p.isCategory) "android.widget.Tab" else "android.widget.Button"
             text = title(p)
             // Read after the name ("Music, Category"), as AndroidX's role description is.
-            if (p.item < 0) extras.putCharSequence("AccessibilityNodeInfo.roleDescription", "Category")
+            if (p.isCategory) extras.putCharSequence("AccessibilityNodeInfo.roleDescription", "Category")
             isEnabled = true
             isVisibleToUser = true
             isClickable = true
-            isLongClickable = p.item >= 0
+            isLongClickable = p.isRow
             isSelected = focusedHere
             isFocusable = true
             isAccessibilityFocused = hovered == virtualViewId
             addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
-            if (p.item >= 0) addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK)
+            if (p.isRow) addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK)
             addAction(
                 if (hovered == virtualViewId) AccessibilityNodeInfo.AccessibilityAction.ACTION_CLEAR_ACCESSIBILITY_FOCUS
                 else AccessibilityNodeInfo.AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS
@@ -137,8 +144,12 @@ class XmbAccessibility(
         }
         val p = placement(virtualViewId) ?: return false
         return when (action) {
-            AccessibilityNodeInfo.ACTION_CLICK -> { activate(p.category, p.item, p.item >= 0); send(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED); true }
-            AccessibilityNodeInfo.ACTION_LONG_CLICK -> p.item >= 0 && run { showOptions(p.category, p.item); true }
+            AccessibilityNodeInfo.ACTION_CLICK -> {
+                if (p.isCrumb) closeFolder(p.crumb) else activate(p.category, p.item, p.isRow)
+                send(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED)
+                true
+            }
+            AccessibilityNodeInfo.ACTION_LONG_CLICK -> p.isRow && run { showOptions(p.category, p.item); true }
             AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS -> { setHovered(virtualViewId); true }
             AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS -> {
                 if (hovered == virtualViewId) { hovered = View.NO_ID; send(virtualViewId, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED) }
@@ -211,13 +222,16 @@ class XmbAccessibility(
         const val CATEGORY_STRIDE = 10_000
         /** Above any row id (categories stay well under a thousand). */
         const val OPTION_BASE = 100_000_000
+        /** Below the option ids, above any row id. */
+        const val CRUMB_BASE = 90_000_000
         private const val MIN_ALPHA = 0.05f
         private const val OPTIONS_SETTLE_MS = 80L
 
         /** A row's touch target covers its icon and label, out to the screen's right edge. */
         fun boundsOf(p: Placement, width: Int): Rect {
             val half = p.size * 0.6f
-            val right = if (p.item < 0) p.x + half else width.toFloat()
+            // Breadcrumbs have no label; rows reach the edge.
+            val right = if (p.isRow) width.toFloat() else p.x + half
             return Rect((p.x - half).toInt(), (p.y - half).toInt(), right.toInt(), (p.y + half).toInt())
         }
     }

@@ -33,6 +33,11 @@ object XmbMetrics {
     const val ITEM_ALPHA = 0.6f
     const val ITEM_LABEL_X = 78f            // titles start here from the column centre, every row
     const val ITEM_LABEL_SIZE = 21f
+    /** Opacity of an open folder's breadcrumb icon beside its list (ours). */
+    const val CRUMB_ALPHA = 0.75f
+    /** Portrait: gap between a breadcrumb icon and its folder's list; and the least room kept left of the outermost breadcrumb (reference px, ours). */
+    const val CRUMB_GAP = 16f
+    const val CRUMB_MARGIN = 6f
     const val ITEM_SUBTITLE_SIZE = 12f
     // PS3 game icons (ICON0, 320x176), as the XMB draws them: measured 290x159 focused and
     // 97x53 unfocused. Their titles start just past the icon's right edge (ours: the capture's

@@ -196,6 +196,51 @@ def test_home(d):
     check(row == rows[0], f"Home left the row on {row}, not {rows[0]}")
 
 
+# Settings open into folders, as on the PS3; rows not listed here sit in the column itself.
+FOLDER_OF = {
+    "Theme Color": "Theme Settings", "Text and Icon Size": "Theme Settings",
+    "Wallpaper": "Theme Settings", "Date and Time": "Theme Settings",
+    "Interface Sounds": "Sound Settings", "Ambient Sound": "Sound Settings", "Startup Sound": "Sound Settings",
+    "Widget Button": "Home Settings", "Hidden Apps": "Home Settings", "Backup": "Home Settings",
+}
+
+
+def walk_to(d, title):
+    """Moves down the current list until the focused row's title starts with [title]."""
+    for _ in range(30):
+        if (d.selected()[1] or "").startswith(title):
+            return
+        d.keys("DPAD_DOWN", pause=0.4)
+    raise Fail(f"no row {title!r}")
+
+
+def settings_top(d):
+    """The Settings column's own list, out of any folder, at the top."""
+    d.go_column("Settings")
+    d.keys("BACK", "BACK", "BACK", pause=1.0)
+    d.to_top()
+
+
+def focus_setting(d, name):
+    """Settings > (its folder >) [name], focused."""
+    settings_top(d)
+    folder = FOLDER_OF.get(name)
+    if folder:
+        walk_to(d, folder)
+        d.keys("ENTER", pause=1.2)
+        d.to_top()
+    walk_to(d, name)
+
+
+def pick(d, label, settle=1.2):
+    """Opens the focused row's options and taps [label]."""
+    d.keys("ENTER", pause=1.2)
+    n = next((n for n in d.nodes() if n.text == label), None)
+    check(n is not None, f"no option {label!r}")
+    d.sh(f"input tap {n.center[0]} {n.center[1]}")
+    time.sleep(settle)
+
+
 def setting_value(d, name):
     n = next((n for n in d.nodes() if n.text.startswith(name + ", ")), None)
     check(n is not None, f"setting {name} not found")
@@ -204,19 +249,33 @@ def setting_value(d, name):
 
 def choose_setting(d, name, value):
     """Opens setting [name] with the d-pad and picks [value] from its options."""
-    d.go_column("Settings")
-    d.to_top()
-    for _ in range(30):
-        if d.selected()[1].startswith(name):
-            break
-        d.keys("DPAD_DOWN", pause=0.4)
-    else:
-        raise Fail(f"no setting {name}")
-    d.keys("ENTER", pause=1.2)
-    option = next((n for n in d.nodes() if n.text == value), None)
-    check(option is not None, f"no option {value!r} for {name}")
-    d.sh(f"input tap {option.center[0]} {option.center[1]}")
+    focus_setting(d, name)
+    pick(d, value)
+
+
+def test_folders(d):
+    """Settings rows open into folders: the bar slides aside, a breadcrumb shows, Left/tap/Home go back."""
+    settings_top(d)
+    walk_to(d, "Theme Settings")
+    d.keys("ENTER", pause=1.4)
+    ns = d.nodes()
+    crumb = next((n for n in ns if n.text == "Back to Theme Settings"), None)
+    check(crumb is not None, f"no breadcrumb: {[n.text for n in ns]}")
+    check(crumb.bounds[0] >= -4 and crumb.bounds[2] > 0, f"breadcrumb off screen: {crumb.bounds}")
+    rows = [n.text for n in ns if not n.category and n.text != "+" and not n.text.startswith("Back to")]
+    check(any(r.startswith("Theme Color") for r in rows), f"folder rows missing: {rows}")
+    check([n.text for n in ns if n.category] == ["Settings"], "other columns still showing inside a folder")
+    d.keys("DPAD_LEFT", pause=1.2)
+    check((d.selected()[1] or "").startswith("Theme Settings"), "Left didn't go back up to the folder's row")
+    d.keys("ENTER", pause=1.4)
+    crumb = next(n for n in d.nodes() if n.text == "Back to Theme Settings")
+    d.sh(f"input tap {crumb.center[0]} {crumb.center[1]}")
     time.sleep(1.2)
+    check(not any(n.text.startswith("Back to") for n in d.nodes()), "tapping the breadcrumb didn't go up")
+    d.keys("ENTER", pause=1.4)
+    d.home_intent()
+    d.go_column("Settings")
+    check(not any(n.text.startswith("Back to") for n in d.nodes()), "Home didn't close the folder")
 
 
 def test_options_tree(d):
@@ -353,17 +412,8 @@ def picker_tap(d, text, seconds=8):
 
 
 def choose_backup(d, entry):
-    d.go_column("Settings")
-    d.to_top()
-    for _ in range(30):
-        if (d.selected()[1] or "").startswith("Backup"):
-            break
-        d.keys("DPAD_DOWN", pause=0.4)
-    d.keys("ENTER", pause=1.2)
-    n = next((n for n in d.nodes() if n.text == entry), None)
-    check(n is not None, f"no {entry} in Backup")
-    d.sh(f"input tap {n.center[0]} {n.center[1]}")
-    time.sleep(2.5)
+    focus_setting(d, "Backup")
+    pick(d, entry, settle=2.5)
 
 
 def test_backup_round_trip(d):
@@ -411,7 +461,7 @@ def clock_patch(d):
 
 def test_clock_setting(d):
     """The date-and-time bar is off by default; Settings > Date and Time brings it back."""
-    d.go_column("Settings")
+    focus_setting(d, "Date and Time")
     check(setting_value(d, "Date and Time") == "Off", "Date and Time should default to Off")
     off = clock_patch(d)
     try:
@@ -425,14 +475,9 @@ def test_clock_setting(d):
 
 def test_wallpaper_setting(d):
     """Settings > Wallpaper opens the system's live-wallpaper preview on ours, and Back returns."""
-    d.go_column("Settings")
+    focus_setting(d, "Wallpaper")
     value = setting_value(d, "Wallpaper")
     check(value in ("XMB Reborn", "Not set"), f"odd Wallpaper value {value!r}")
-    d.to_top()
-    for _ in range(30):
-        if (d.selected()[1] or "").startswith("Wallpaper"):
-            break
-        d.keys("DPAD_DOWN", pause=0.4)
     d.keys("ENTER", pause=1.2)
     entry = next((n for n in d.nodes() if n.text in ("Use XMB Wallpaper", "Set Again")), None)
     check(entry is not None, "no wallpaper option")
@@ -445,17 +490,7 @@ def test_wallpaper_setting(d):
 
 
 def choose_option(d, setting, label):
-    d.go_column("Settings")
-    d.to_top()
-    for _ in range(30):
-        if (d.selected()[1] or "").startswith(setting):
-            break
-        d.keys("DPAD_DOWN", pause=0.4)
-    d.keys("ENTER", pause=1.2)
-    n = next((n for n in d.nodes() if n.text == label), None)
-    check(n is not None, f"no {label!r} for {setting}")
-    d.sh(f"input tap {n.center[0]} {n.center[1]}")
-    time.sleep(1.5)
+    choose_setting(d, setting, label)
 
 
 def row_height(d):
@@ -465,7 +500,7 @@ def row_height(d):
 
 def test_text_size(d):
     """Text and Icon Size defaults to Large; Normal makes rows smaller, and Large brings them back."""
-    d.go_column("Settings")
+    focus_setting(d, "Text and Icon Size")
     check(setting_value(d, "Text and Icon Size") == "Large", "default size should be Large")
     large = row_height(d)
     try:
@@ -521,7 +556,7 @@ def test_no_crash(d):
     check(PKG not in log, "crash buffer mentions the app:\n" + log[-1500:])
 
 
-TESTS = [test_tree, test_options_tree, test_dpad, test_fling, test_fling_catch, test_a11y_click, test_home,
+TESTS = [test_tree, test_folders, test_options_tree, test_dpad, test_fling, test_fling_catch, test_a11y_click, test_home,
          test_widget_button_setting, test_jump_to_letter, test_letter_keys, test_long_panel_scrolls, test_backup_round_trip, test_clock_setting, test_text_size, test_wallpaper_setting, test_apps_live, test_landscape, test_no_crash]
 
 

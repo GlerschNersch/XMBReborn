@@ -13,7 +13,18 @@ data class Placement(
     val size: Float,
     val alpha: Float,
     val focus: Float,       // 1 = the focused icon, falling to 0 one step away
-)
+    /** For an open folder's breadcrumb icon, how deep it is (0 = outermost); -1 otherwise. */
+    val crumb: Int = -1,
+) {
+    val isRow get() = item >= 0
+    val isCategory get() = item == -1
+    val isCrumb get() = crumb >= 0
+
+    companion object {
+        /** [Placement.item] for a breadcrumb (neither a row nor a category icon). */
+        const val CRUMB_ITEM = -2
+    }
+}
 
 /**
  * Pure layout of the bar for a viewport; no GL, so it can be unit-tested. [scale] enlarges
@@ -29,23 +40,61 @@ class XmbLayout(val width: Float, val height: Float, val scale: Float = 1f) {
 
     fun columnX(category: Int, scroll: Float) = anchorX + (category - scroll) * M.CATEGORY_SPACING * unit
 
-    fun categories(model: XmbModel, motion: XmbMotion): List<Placement> =
-        model.categories.indices.mapNotNull { i ->
-            val f = closeness(i - motion.category)
-            val x = columnX(i, motion.category)
-            val size = lerp(M.CATEGORY_ICON, M.CATEGORY_ICON_FOCUSED, f) * unit
-            if (x < -size || x > width + size) null
-            else Placement(i, -1, x, anchorY, size, lerp(M.CATEGORY_ALPHA, 1f, f), f)
-        }
+    /**
+     * How far apart an open folder's breadcrumbs and list sit. A column apart, as on the PS3; in
+     * portrait, where the list starts near the left edge, just past the breadcrumb icon instead.
+     */
+    val folderStep: Float get() {
+        val column = M.CATEGORY_SPACING * unit
+        return if (portrait) minOf(column, (M.ITEM_ICON_FOCUSED + M.CRUMB_GAP) * unit) else column
+    }
 
-    /** Rows of every column near focus; a column's rows fade with its distance from focus. */
+    /**
+     * How far the bar has slid left (px) for the focused column's open folders: a [folderStep]
+     * per folder, but never so far that the outermost breadcrumb leaves the screen.
+     */
+    private fun shift(model: XmbModel, motion: XmbMotion): Float {
+        val most = (anchorX - (M.ITEM_ICON_FOCUSED / 2 + M.CRUMB_MARGIN) * unit).coerceAtLeast(0f)
+        return minOf(motion.depth(model.focus) * folderStep, most)
+    }
+
+    /** Other columns step out of the way while a folder is open. */
+    private fun othersAlpha(model: XmbModel, motion: XmbMotion) = (1f - motion.depth(model.focus)).coerceIn(0f, 1f)
+
+    fun categories(model: XmbModel, motion: XmbMotion): List<Placement> {
+        val shift = shift(model, motion)
+        val others = othersAlpha(model, motion)
+        return model.categories.indices.mapNotNull { i ->
+            val f = closeness(i - motion.category)
+            val x = columnX(i, motion.category) - shift
+            val size = lerp(M.CATEGORY_ICON, M.CATEGORY_ICON_FOCUSED, f) * unit
+            val alpha = lerp(M.CATEGORY_ALPHA, 1f, f) * if (i == model.focus) 1f else others
+            if (x < -size || x > width + size || alpha <= 0.01f) null
+            else Placement(i, -1, x, anchorY, size, alpha, f)
+        }
+    }
+
+    /**
+     * Rows of every column near focus; a column's rows fade with its distance from focus. A column
+     * with folders open shows the innermost one's rows a column right per folder, and each open
+     * folder's icon as a breadcrumb in the focused row's line, left of them.
+     */
     fun items(model: XmbModel, motion: XmbMotion): List<Placement> {
         val out = ArrayList<Placement>()
+        val shift = shift(model, motion)
+        val others = othersAlpha(model, motion)
+        val step = folderStep
         for (c in model.categories.indices) {
             // Old and new lists cross-fade linearly as the bar moves, as on the PS3.
-            val columnAlpha = max(0f, 1f - abs(c - motion.category) * M.ROW_FADE_RATE)
+            val columnAlpha = max(0f, 1f - abs(c - motion.category) * M.ROW_FADE_RATE) * if (c == model.focus) 1f else others
             if (columnAlpha <= 0.01f) continue
-            val x = columnX(c, motion.category)
+            val category = model.categories[c]
+            val origin = columnX(c, motion.category) - shift
+            category.crumbs.forEachIndexed { k, _ ->
+                val size = M.ITEM_ICON_FOCUSED * unit
+                out.add(Placement(c, Placement.CRUMB_ITEM, origin + k * step, rowY(0f), size, columnAlpha * M.CRUMB_ALPHA, 1f, crumb = k))
+            }
+            val x = origin + category.depth * step
             val scroll = motion.item(c)
             model.categories[c].items.indices.forEach { j ->
                 val r = j - scroll

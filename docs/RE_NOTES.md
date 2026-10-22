@@ -217,3 +217,26 @@ scale, clear area right of the list): PS3 46.9 spots per 100k px², ours 16.3 wi
 Cost (release build, phone): ~14% of one core in total (GL ~9%, ambient synth ~2%). Debug builds
 read 3–4× higher because ART limits JIT for debuggable apps, so measure release. `run-as` (used to
 copy sound files in) only works on the debug build.
+
+## Message sounds and Settings folders (21 Oct, evening)
+
+`re/tools/sound_shape.py` prints a sound's 10–50 ms envelope and strongest partials.
+
+- `snd_system_ok` (0.30 s, peak 0.027 FS, about a third of the click): one partial at 3.14 kHz,
+  held for about 60 ms while falling only 4 dB, cut off over a few ms, then a faint tail about
+  30 dB down for the next 0.2 s.
+- `snd_system_ng` (0.80 s, peak 0.071 FS): a 1.05 kHz partial (faint 3.14 kHz above) swelling
+  over 20–30 ms and down 30 dB by 110 ms. A rough, fluttering tail sits about 26 dB down from
+  150 to 320 ms, then fades out by about 550 ms.
+- `snd_category_decide` is the same click as `snd_cursor`, so it adds nothing.
+
+`Sfx.kt` synthesizes both from these figures (`okBeep`, `errorBuzz`) when the user hasn't supplied
+their own files.
+
+Settings structure (`category_sysconf.xml`): the PS3's Settings column is a list of folders
+(`msg_theme_settings`, `msg_sound_setting`, `msg_datetime_setting` …), each a `child` view with its
+own items and `icon_rsc`. The launcher mirrors that: Theme, Sound and Home Settings folders,
+plus Android's settings in a folder of their own. The open-folder motion wasn't captured. Ours
+slides the bar one column left per folder (`XmbMetrics.FOCUS_TIME_CONSTANT`, as the bar) and keeps
+the folder's icon in the focused row's line. In portrait the slide is capped so that icon stays
+on screen.

@@ -22,6 +22,7 @@ import kotlin.math.hypot
  * The launcher surface. Drags scroll the bar one column / row per spacing of travel (axis
  * locked after touch slop); taps focus, and a tap on the focused row opens it. A long press on
  * a row, or Triangle / Menu, opens its options panel; while that shows, input goes to it.
+ * Opening a folder row slides its list in; left, Back, or a tap on its breadcrumb icon goes up.
  * D-pad and gamepad buttons work too, for TV boxes and controllers. A quick flick up or down
  * keeps a list going for a while, a row at a time, slowing as it goes.
  */
@@ -42,6 +43,7 @@ class XmbView(
         activate = { c, i, open -> renderer.post { r -> activateNow(r, c, i, open) } },
         showOptions = { c, i -> renderer.post { r -> activateNow(r, c, i, open = false); showOptionsFor(r) } },
         chooseOption = { i -> renderer.post { r -> chooseOptionNow(r, i) } },
+        closeFolder = { depth -> renderer.post { r -> closeFolderNow(r, depth) } },
     )
 
     override fun getAccessibilityNodeProvider() = a11y
@@ -136,9 +138,23 @@ class XmbView(
         cancelOptionsNow(r)
         val m = r.model ?: return@post
         val target = m.categories.indexOfFirst { it.id == categoryId }.takeIf { it >= 0 } ?: return@post
+        var closed = false
+        for (c in m.categories) closed = c.closeTo(0) || closed
         val movedColumn = m.setCategory(target)
         val movedRow = m.focused.setFocus(0)
-        if (movedColumn || movedRow) sfx.play(Sfx.Kind.CANCEL)
+        if (movedColumn || movedRow || closed) { sfx.play(Sfx.Kind.CANCEL); a11y.contentChanged() }
+    }
+
+    /** Back: closes the options panel if it's open, otherwise the innermost open folder. */
+    fun back() = renderer.post { r ->
+        if (r.optionsShowing) cancelOptionsNow(r) else closeFolderNow(r)
+    }
+
+    private fun closeFolderNow(r: XmbRenderer, toDepth: Int = -1): Boolean {
+        val cat = r.model?.focused ?: return false
+        val closed = if (toDepth < 0) cat.close() else cat.closeTo(toDepth)
+        if (closed) { sfx.play(Sfx.Kind.CANCEL); a11y.contentChanged() }
+        return closed
     }
 
     /** Focuses row [index] of the column [categoryId] (Jump to Letter). */
@@ -183,6 +199,8 @@ class XmbView(
     /** Moves focus and plays the tick if anything actually moved. */
     private fun moveNow(r: XmbRenderer, dx: Int, dy: Int) {
         val m = r.model ?: return
+        // Inside a folder, left goes back up a level and right does nothing, as on the PS3.
+        if (dx != 0 && m.focused.depth > 0) { if (dx < 0) closeFolderNow(r); return }
         val moved = if (dx != 0) m.moveCategory(dx) else m.focused.moveFocus(dy)
         if (moved) { sfx.play(Sfx.Kind.CURSOR); a11y.contentChanged() }
         // A fling that hits the end of the list stops there.
@@ -202,7 +220,9 @@ class XmbView(
 
     /** Opens the focused row: our settings show their choices here; anything else launches. */
     private fun openNow(r: XmbRenderer) {
-        val item = r.model?.focused?.focusedItem ?: return
+        val cat = r.model?.focused ?: return
+        val item = cat.focusedItem ?: return
+        if (cat.open()) { sfx.play(Sfx.Kind.DECIDE); a11y.contentChanged(); return }
         if (item.payload is Launch.Setting) { showOptionsFor(r); return }
         sfx.play(Sfx.Kind.DECIDE)
         post { onOpen(item) }
@@ -283,7 +303,9 @@ class XmbView(
             ?: return
         renderer.post { r ->
             val m = r.model ?: return@post
-            if (hit.item < 0) {
+            if (hit.isCrumb) {
+                if (hit.category == m.focus) closeFolderNow(r, toDepth = hit.crumb)
+            } else if (hit.item < 0) {
                 if (m.setCategory(hit.category)) sfx.play(Sfx.Kind.CURSOR)
             } else if (hit.category == m.focus) {
                 val cat = m.focused
@@ -325,11 +347,12 @@ class XmbView(
         KeyEvent.KEYCODE_DPAD_DOWN -> moveNow(r, 0, 1)
         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> openNow(r)
         KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_MENU -> showOptionsFor(r)
+        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_BUTTON_B -> { closeFolderNow(r); Unit }
         // A page at a time, like L1/R1 in a long PS3 list.
         KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_BUTTON_L1 -> moveNow(r, 0, -PAGE_ROWS)
         KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_BUTTON_R1 -> moveNow(r, 0, PAGE_ROWS)
         in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> jumpToLetterNow(r, ('A' + (keyCode - KeyEvent.KEYCODE_A)).toString())
-        else -> Unit // back with nothing open: home stays home
+        else -> Unit
     }
 
     /** Typing a letter on a keyboard jumps to the first row starting with it, if there is one. */

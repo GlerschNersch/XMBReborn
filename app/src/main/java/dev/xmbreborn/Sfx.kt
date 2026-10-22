@@ -13,11 +13,13 @@ import kotlin.math.sin
  * with re/tools/rco.py; [ownSound] finds one by name), those play; nothing of Sony's ships in the app. Otherwise we
  * synthesize our own, shaped after the PS3's (docs/RE_NOTES.md): one 40 ms click for cursor,
  * decide and options, centred near 6.8 kHz with nearly all its energy in the first 4 ms;
- * cancel is the same click a little lower and quieter.
+ * cancel is the same click a little lower and quieter. [Kind.OK] and [Kind.ERROR] are the PS3's
+ * message sounds: a short high beep when something worked, a lower buzzing one when it didn't.
  */
 class Sfx(ownSound: (String) -> File? = { null }) {
     enum class Kind(val file: String) {
-        CURSOR("snd_cursor.wav"), DECIDE("snd_decide.wav"), CANCEL("snd_cancel.wav"), OPTION("snd_option.wav")
+        CURSOR("snd_cursor.wav"), DECIDE("snd_decide.wav"), CANCEL("snd_cancel.wav"), OPTION("snd_option.wav"),
+        OK("snd_system_ok.wav"), ERROR("snd_system_ng.wav"),
     }
 
     /** Kinds playing the user's own files rather than our synthesized clicks. */
@@ -27,6 +29,8 @@ class Sfx(ownSound: (String) -> File? = { null }) {
         ownSound(kind.file)?.let(::load)?.also { fromFiles += kind } ?: when (kind) {
             Kind.CURSOR, Kind.DECIDE, Kind.OPTION -> track(click(6840.0, upper = 1.30, lower = 0.712, peak = 0.16))
             Kind.CANCEL -> track(click(6450.0, upper = 1.30, lower = 0.0, peak = 0.08))
+            Kind.OK -> track(okBeep())
+            Kind.ERROR -> track(errorBuzz())
         }
     }
 
@@ -65,6 +69,46 @@ class Sfx(ownSound: (String) -> File? = { null }) {
                 0.14 * sin(2 * PI * freq * upper * t) +
                 (if (lower > 0) 0.11 * sin(2 * PI * freq * lower * t) else 0.0)
             (s / 1.25 * env * peak * Short.MAX_VALUE).toInt().toShort()
+        }
+    }
+
+    /**
+     * As measured: a 3.14 kHz tone held about 60 ms (falling only 4 dB), cut off over a few ms,
+     * then a faint tail some 30 dB down for the next 0.2 s. A third of the click's level.
+     */
+    private fun okBeep(): ShortArray {
+        val n = (RATE * 0.30).toInt()
+        return ShortArray(n) { i ->
+            val t = i / RATE.toDouble()
+            val attack = (t / 0.002).coerceAtMost(1.0)
+            val body = when {
+                t < 0.060 -> 1.0 - 0.37 * t / 0.060
+                t < 0.066 -> 0.63 * (1 - (t - 0.060) / 0.006)
+                else -> 0.0
+            }
+            val tail = if (t >= 0.060) 0.03 * exp(-(t - 0.060) / 0.07) else 0.0
+            (sin(2 * PI * 3140 * t) * attack * (body + tail) * 0.05 * Short.MAX_VALUE).toInt().toShort()
+        }
+    }
+
+    /**
+     * As measured: a 1.05 kHz tone swelling over 25 ms and dying 30 dB by 110 ms, then a rough,
+     * fluttering tail about 26 dB down to 0.3 s that fades out by 0.55 s, plus a faint 3.14 kHz edge.
+     */
+    private fun errorBuzz(): ShortArray {
+        val n = (RATE * 0.60).toInt()
+        return ShortArray(n) { i ->
+            val t = i / RATE.toDouble()
+            val swell = if (t < 0.025) 0.5 - 0.5 * kotlin.math.cos(PI * t / 0.025) else 1.0
+            val strike = swell * if (t < 0.03) 1.0 else exp(-(t - 0.03) / 0.024)
+            val flutter = 0.75 + 0.25 * sin(2 * PI * 13 * t)
+            val tail = 0.05 * flutter * when {
+                t < 0.12 -> t / 0.12
+                t < 0.32 -> 1.0
+                else -> exp(-(t - 0.32) / 0.07)
+            }
+            val s = sin(2 * PI * 1050 * t) + 0.015 * sin(2 * PI * 3140 * t)
+            (s * (strike + tail) * 0.12 * Short.MAX_VALUE).toInt().toShort()
         }
     }
 

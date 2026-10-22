@@ -46,6 +46,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
      *  and the column ids in order. */
     @Volatile var barScroll = 0f
         private set
+    /** How far the bar has slid left into the focused column's open folders (columns). */
+    @Volatile var folderShift = 0f
+        private set
     @Volatile var columnIds: List<String> = emptyList()
         private set
     @Volatile var lastLayout: XmbLayout = layout
@@ -140,10 +143,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
         if (old != null) {
             old.focused.id.let { id -> newModel.categories.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let(newModel::setCategory) }
             for (c in newModel.categories) {
-                val prev = old.category(c.id) ?: continue
-                // Same row if it's still there; otherwise (e.g. just hidden) whatever took its place.
-                val same = prev.focusedItem?.id?.let { id -> c.items.indexOfFirst { it.id == id } } ?: -1
-                c.setFocus(if (same >= 0) same else minOf(prev.focus, c.items.size - 1))
+                // Same row (and open folders) if still there; otherwise (e.g. just hidden)
+                // whatever took its place.
+                old.category(c.id)?.let(c::keepPathOf)
             }
         }
         model = newModel
@@ -243,6 +245,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val faded = (1f - (if (layout.portrait) M.OPTIONS_DIM_PORTRAIT else M.OPTIONS_DIM) * dim) * introBar
         val panelX = panelX()
         items.forEach { p ->
+            if (p.isCrumb) { drawCrumb(model, p, faded); return@forEach }
             val focusedRow = p.category == model.focus && p.item == model.focused.focus
             if (focusedRow && dim > 0.005f) drawFocusBand(p, panelX)
             drawItem(model, p, if (focusedRow) introBar else faded, if (focusedRow) dim else 0f, shift = !layout.portrait)
@@ -253,6 +256,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         sprites.end()
         lastPlacements = cats + items
         barScroll = motion.category
+        folderShift = motion.depth(model.focus)
     }
 
     /** Date and time, right-aligned on a translucent bar off the top-right edge, as on the PS3. */
@@ -374,6 +378,15 @@ class XmbRenderer : GLSurfaceView.Renderer {
             sprites.draw(label.id, p.x - label.width / 2f, p.y + p.size / 2 + M.CATEGORY_LABEL_GAP * layout.unit - label.height * 0.2f,
                 label.width.toFloat(), label.height.toFloat(), p.focus * fade)
         }
+    }
+
+    /** An open folder's icon, left of its list in the focused row's line; no label, as on the PS3. */
+    private fun drawCrumb(model: XmbModel, p: Placement, fade: Float) {
+        val item = model.categories[p.category].crumbs.getOrNull(p.crumb) ?: return
+        val icon = icons[item.id] as? ItemIcon.Of ?: return
+        val iconPx = (M.ITEM_ICON_FOCUSED * layout.unit).toInt().coerceAtLeast(16)
+        val tex = textures.icon("glyph:${icon.glyph}:$iconPx") { GlyphPainter.render(icon.glyph, iconPx) }
+        sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade * IconTint.OPACITY, glyphTint)
     }
 
     /** [fade] dims the whole row; [lift] (0..1) is the focused row's options state: its label dims and, if [shift], moves right. */

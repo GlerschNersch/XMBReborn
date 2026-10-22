@@ -37,30 +37,36 @@ Requires Android 10 or newer and OpenGL ES 3.
 - **Home** while you're already home glides back to the top of the Apps column.
 - **"Add to Home screen"** from other apps (Chrome, Maps…) puts the shortcut in a **Shortcuts**
   column.
-- **Settings** column:
-  - **Theme Color:** Original follows the month, or pick one of the 12 month colours. The
-    background previews each colour as you scroll.
-  - **Ambient Sound:** a soft background pad of our own (the PS3 has none). It pauses whenever
-    another app plays media.
-  - **Interface Sounds:** the menu clicks.
-  - **Startup Sound:** plays once after the phone powers on, if you've supplied a sound (see below).
-  - **Text and Icon Size:** Large by default, for a phone held in the hand. Normal keeps the
-    PS3's own proportions, and Larger goes bigger still. Each size previews as you scroll.
-  - **Widget Button:** hide the round **+** (Add Widget Here in options still works).
-  - **Date and Time:** the PS3's clock bar at the top right. Off by default, since Android's
-    status bar already shows the time.
-  - **Wallpaper:** sets the XMB wave and colours as your phone's live wallpaper. With gesture
-    navigation, swiping home from an app plays Android's own animation over the wallpaper before
-    XMB Reborn appears. This makes that moment show the XMB rather than a different picture.
-  - **Backup:** save your settings, hidden apps and recent order to a file, or restore them,
-    e.g. on a new phone. Widgets and the PS3 folder aren't included; Android ties those to the
-    phone they were set up on. Android's own backup carries the same settings.
-  - **Hidden Apps:** bring back apps you've hidden.
-  - Shortcuts into Android's own settings.
+- **Settings** column, in folders as on the PS3. Open one to slide its list in; press Back,
+  swipe right or tap its icon on the left to go back up.
+  - **Theme Settings**
+    - **Theme Color:** Original follows the month, or pick one of the 12 month colours. The
+      background previews each colour as you scroll.
+    - **Text and Icon Size:** Large by default, for a phone held in the hand. Normal keeps the
+      PS3's own proportions, and Larger goes bigger still. Each size previews as you scroll.
+    - **Wallpaper:** sets the XMB wave and colours as your phone's live wallpaper. With gesture
+      navigation, swiping home from an app plays Android's own animation over the wallpaper
+      before XMB Reborn appears. This makes that moment show the XMB rather than a different picture.
+    - **Date and Time:** the PS3's clock bar at the top right. Off by default, since Android's
+      status bar already shows the time.
+  - **Sound Settings**
+    - **Interface Sounds:** the menu clicks, plus a short tone when something works or fails.
+    - **Ambient Sound:** a soft background pad of our own (the PS3 has none). It pauses whenever
+      another app plays media.
+    - **Startup Sound:** plays once after the phone powers on, if you've supplied a sound (see below).
+  - **Home Settings**
+    - **Widget Button:** hide the round **+** (Add Widget Here in options still works).
+    - **Hidden Apps:** bring back apps you've hidden.
+    - **Backup:** save your settings, hidden apps and recent order to a file, or restore them,
+      e.g. on a new phone. Widgets and the PS3 folder aren't included; Android ties those to the
+      phone they were set up on. Android's own backup carries the same settings.
+  - **PS3 Games** (see below).
+  - **Android Settings:** shortcuts into Android's own settings.
 - **TalkBack** reads the categories, rows and options; double-tap opens, and double-tap-and-hold
   shows options.
 - Apps are grouped by the category the developer gave them (Photo, Music, Video, Game, Network),
-  most recently opened first. **Apps** lists everything A–Z.
+  most recently opened first. **Apps** lists everything A–Z. The focused app shows when you last opened it.
+- Messages ("Backup saved", "Can't open…") appear briefly at the top right, as on the PS3.
 
 ## Widgets
 
@@ -107,7 +113,8 @@ ffmpeg -i <dev_flash>/vsh/resource/coldboot_stereo.ac3 -c:a aac out/sounds/coldb
 
 D=/sdcard/Android/data/dev.xmbreborn/files/sounds
 adb shell mkdir -p $D
-adb push out/sounds/snd_cursor.wav out/sounds/snd_decide.wav out/sounds/snd_cancel.wav          out/sounds/snd_option.wav out/sounds/coldboot.m4a $D/
+cd out/sounds && adb push snd_cursor.wav snd_decide.wav snd_cancel.wav snd_option.wav \
+  snd_system_ok.wav snd_system_ng.wav coldboot.m4a $D/ && cd -
 adb shell am force-stop dev.xmbreborn   # it picks them up when it next opens
 ```
 

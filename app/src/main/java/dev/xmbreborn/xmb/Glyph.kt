@@ -10,7 +10,12 @@ import android.graphics.RectF
 import kotlin.math.cos
 import kotlin.math.sin
 
-enum class Glyph { USER, SETTINGS, PHOTO, MUSIC, VIDEO, GAME, NETWORK, APPS, FOLDER }
+enum class Glyph {
+    USER, SETTINGS, PHOTO, MUSIC, VIDEO, GAME, NETWORK, APPS, FOLDER,
+    // Settings rows, one per kind of setting, as the PS3 gives each its own icon.
+    PALETTE, SPEAKER, HOME, DEVICE, TEXT, CLOCK, WIDGETS, HIDDEN, BACKUP, WIFI, BLUETOOTH,
+    BRIGHTNESS, BATTERY, INFO,
+}
 
 /**
  * Our own category icons, drawn on a 100x100 grid (none of the XMB's artwork is used). Each
@@ -58,6 +63,21 @@ object GlyphPainter {
     }
 
     private fun shape(build: Shape.() -> Unit): Path = Shape().apply(build).path
+
+    /** A straight bar [w] wide from (x1, y1) to (x2, y2), square-ended. */
+    private fun Path.bar(x1: Float, y1: Float, x2: Float, y2: Float, w: Float) {
+        val len = kotlin.math.hypot(x2 - x1, y2 - y1)
+        val nx = -(y2 - y1) / len * w / 2
+        val ny = (x2 - x1) / len * w / 2
+        moveTo(x1 + nx, y1 + ny); lineTo(x2 + nx, y2 + ny); lineTo(x2 - nx, y2 - ny); lineTo(x1 - nx, y1 - ny); close()
+    }
+
+    /** A band of a ring around (cx, cy), between radii [inner] and [outer], over an angle (degrees). */
+    private fun Path.ring(cx: Float, cy: Float, outer: Float, inner: Float, start: Float, sweep: Float) {
+        arcTo(RectF(cx - outer, cy - outer, cx + outer, cy + outer), start, sweep, true)
+        arcTo(RectF(cx - inner, cy - inner, cx + inner, cy + inner), start + sweep, -sweep)
+        close()
+    }
 
     private fun path(g: Glyph): Path = when (g) {
         Glyph.USER -> shape {
@@ -128,6 +148,104 @@ object GlyphPainter {
                 moveTo(12f, 28f); lineTo(40f, 28f); lineTo(47f, 36f); lineTo(88f, 36f)
                 lineTo(88f, 78f); lineTo(12f, 78f); close()
             }
+        }
+        Glyph.PALETTE -> shape {
+            add { addOval(RectF(12f, 18f, 88f, 82f), Path.Direction.CW) }
+            cut { addCircle(76f, 66f, 11f, Path.Direction.CW) }   // the thumb notch
+            for ((x, y) in listOf(32f to 44f, 46f to 30f, 64f to 32f, 34f to 62f)) {
+                cut { addCircle(x, y, 6.5f, Path.Direction.CW) }   // paint wells
+            }
+        }
+        Glyph.SPEAKER -> shape {
+            add { addRect(RectF(14f, 40f, 30f, 60f), Path.Direction.CW) }
+            add { moveTo(28f, 40f); lineTo(50f, 22f); lineTo(50f, 78f); lineTo(28f, 60f); close() }
+            add { ring(50f, 50f, 22f, 16f, -45f, 90f) }
+            add { ring(50f, 50f, 36f, 30f, -48f, 96f) }
+        }
+        Glyph.HOME -> shape {
+            add {
+                moveTo(50f, 14f); lineTo(90f, 50f); lineTo(79f, 50f); lineTo(79f, 86f)
+                lineTo(21f, 86f); lineTo(21f, 50f); lineTo(10f, 50f); close()
+            }
+            cut { addRect(RectF(42f, 60f, 58f, 86f), Path.Direction.CW) }
+        }
+        Glyph.DEVICE -> shape {
+            add { addRoundRect(RectF(30f, 10f, 70f, 90f), 9f, 9f, Path.Direction.CW) }
+            cut { addRoundRect(RectF(35f, 19f, 65f, 76f), 2f, 2f, Path.Direction.CW) }
+            cut { addCircle(50f, 83f, 3.5f, Path.Direction.CW) }
+        }
+        Glyph.TEXT -> shape {
+            add {
+                moveTo(44f, 14f); lineTo(56f, 14f); lineTo(86f, 86f); lineTo(72f, 86f); lineTo(64f, 66f)
+                lineTo(36f, 66f); lineTo(28f, 86f); lineTo(14f, 86f); close()
+            }
+            cut { moveTo(50f, 34f); lineTo(59f, 55f); lineTo(41f, 55f); close() }
+        }
+        Glyph.CLOCK -> shape {
+            add { addCircle(50f, 50f, 38f, Path.Direction.CW) }
+            cut { addCircle(50f, 50f, 32f, Path.Direction.CW) }
+            add { bar(50f, 50f, 50f, 26f, 6f) }
+            add { bar(50f, 50f, 68f, 58f, 6f) }
+            add { addCircle(50f, 50f, 5f, Path.Direction.CW) }
+        }
+        Glyph.WIDGETS -> shape {
+            add { addRoundRect(RectF(14f, 14f, 46f, 46f), 6f, 6f, Path.Direction.CW) }
+            add { addRoundRect(RectF(54f, 14f, 86f, 46f), 6f, 6f, Path.Direction.CW) }
+            add { addRoundRect(RectF(14f, 54f, 86f, 86f), 6f, 6f, Path.Direction.CW) }
+        }
+        Glyph.HIDDEN -> shape {
+            add { moveTo(8f, 50f); quadTo(50f, 4f, 92f, 50f); quadTo(50f, 96f, 8f, 50f); close() }
+            cut { moveTo(18f, 50f); quadTo(50f, 18f, 82f, 50f); quadTo(50f, 82f, 18f, 50f); close() }
+            add { addCircle(50f, 50f, 11f, Path.Direction.CW) }
+            cut { bar(16f, 88f, 84f, 12f, 14f) }   // a gap either side of the slash
+            add { bar(18f, 86f, 82f, 14f, 6f) }
+        }
+        Glyph.BACKUP -> shape {
+            add {
+                moveTo(12f, 56f); lineTo(22f, 56f); lineTo(22f, 76f); lineTo(78f, 76f); lineTo(78f, 56f)
+                lineTo(88f, 56f); lineTo(88f, 86f); lineTo(12f, 86f); close()
+            }
+            add {
+                moveTo(50f, 10f); lineTo(73f, 36f); lineTo(57f, 36f); lineTo(57f, 66f)
+                lineTo(43f, 66f); lineTo(43f, 36f); lineTo(27f, 36f); close()
+            }
+        }
+        Glyph.WIFI -> shape {
+            add { ring(50f, 80f, 62f, 52f, -135f, 90f) }
+            add { ring(50f, 80f, 44f, 34f, -135f, 90f) }
+            add { ring(50f, 80f, 26f, 16f, -135f, 90f) }
+            add { addCircle(50f, 78f, 6f, Path.Direction.CW) }
+        }
+        Glyph.BLUETOOTH -> shape {
+            add {
+                moveTo(44f, 10f); lineTo(52f, 10f); lineTo(76f, 32f); lineTo(58f, 50f); lineTo(76f, 68f)
+                lineTo(52f, 90f); lineTo(44f, 90f); close()
+            }
+            cut { moveTo(52f, 23f); lineTo(64f, 32f); lineTo(52f, 42f); close() }
+            cut { moveTo(52f, 58f); lineTo(64f, 68f); lineTo(52f, 77f); close() }
+            add { bar(24f, 31f, 52f, 54f, 7f) }
+            add { bar(24f, 69f, 52f, 46f, 7f) }
+        }
+        Glyph.BRIGHTNESS -> shape {
+            add { addCircle(50f, 50f, 15f, Path.Direction.CW) }
+            for (i in 0 until 8) {
+                val a = Math.PI * i / 4
+                val c = cos(a).toFloat()
+                val s = sin(a).toFloat()
+                add { bar(50f + 23f * c, 50f + 23f * s, 50f + 37f * c, 50f + 37f * s, 7f) }
+            }
+        }
+        Glyph.BATTERY -> shape {
+            add { addRoundRect(RectF(12f, 30f, 80f, 70f), 7f, 7f, Path.Direction.CW) }
+            cut { addRoundRect(RectF(18f, 36f, 74f, 64f), 3f, 3f, Path.Direction.CW) }
+            add { addRoundRect(RectF(80f, 42f, 89f, 58f), 2f, 2f, Path.Direction.CW) }
+            add { addRect(RectF(23f, 41f, 50f, 59f), Path.Direction.CW) }
+        }
+        Glyph.INFO -> shape {
+            add { addCircle(50f, 50f, 38f, Path.Direction.CW) }
+            cut { addCircle(50f, 50f, 32f, Path.Direction.CW) }
+            add { addCircle(50f, 30f, 5.5f, Path.Direction.CW) }
+            add { addRoundRect(RectF(45f, 42f, 55f, 74f), 2f, 2f, Path.Direction.CW) }
         }
     }
 }
