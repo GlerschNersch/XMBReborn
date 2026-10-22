@@ -29,10 +29,11 @@ Requires Android 10 or newer and OpenGL ES 3.
 
 - **Swipe sideways** to change category and **up and down** to move through a list. **Flick** to
   run down a long list; touch the screen to stop it. Tap a row to focus it, then tap it again to
-  open it. D-pads and game controllers work too: Ⓐ opens, Ⓑ goes
-  back, and Ⓨ/Menu opens options.
+  open it. D-pads and game controllers work too: Ⓐ opens, Ⓑ goes back, Ⓨ/Menu opens options,
+  and L1/R1 (or Page Up/Down) skip ten rows. On a keyboard, type a letter to jump to it.
 - **Long-press** a row (or press Ⓨ/Menu) for its options: Open, the app's own shortcuts (like
-  "New tab"), App Info, Add Widget Here, Hide, Uninstall.
+  "New tab"), App Info, **Jump to Letter** (in long lists such as Apps), Add Widget Here, Hide,
+  Uninstall.
 - **Home** while you're already home glides back to the top of the Apps column.
 - **"Add to Home screen"** from other apps (Chrome, Maps…) puts the shortcut in a **Shortcuts**
   column.
@@ -44,10 +45,15 @@ Requires Android 10 or newer and OpenGL ES 3.
   - **Interface Sounds:** the menu clicks.
   - **Startup Sound:** plays once after the phone powers on, if you've supplied a sound (see below).
   - **Widget Button:** hide the round **+** (Add Widget Here in options still works).
+  - **Date and Time:** the PS3's clock bar at the top right. Off by default, since Android's
+    status bar already shows the time.
+  - **Backup:** save your settings, hidden apps and recent order to a file, or restore them,
+    e.g. on a new phone. Widgets and the PS3 folder aren't included; Android ties those to the
+    phone they were set up on. Android's own backup carries the same settings.
   - **Hidden Apps:** bring back apps you've hidden.
   - Shortcuts into Android's own settings.
-- **TalkBack** reads the categories and rows; double-tap opens, and double-tap-and-hold shows
-  options.
+- **TalkBack** reads the categories, rows and options; double-tap opens, and double-tap-and-hold
+  shows options.
 - Apps are grouped by the category the developer gave them (Photo, Music, Video, Game, Network),
   most recently opened first. **Apps** lists everything A–Z.
 

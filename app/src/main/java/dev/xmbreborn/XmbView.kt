@@ -41,6 +41,7 @@ class XmbView(
     private val a11y = XmbAccessibility(this, renderer,
         activate = { c, i, open -> renderer.post { r -> activateNow(r, c, i, open) } },
         showOptions = { c, i -> renderer.post { r -> activateNow(r, c, i, open = false); showOptionsFor(r) } },
+        chooseOption = { i -> renderer.post { r -> chooseOptionNow(r, i) } },
     )
 
     override fun getAccessibilityNodeProvider() = a11y
@@ -125,6 +126,7 @@ class XmbView(
     fun showOptions(options: XmbOptions) = renderer.post { r ->
         r.openOptions(options)
         sfx.play(Sfx.Kind.OPTION)
+        a11y.optionsChanged(open = true)
     }
 
     /** Back to a column's top row, closing any options (Home pressed while already home). */
@@ -137,6 +139,13 @@ class XmbView(
         if (movedColumn || movedRow) sfx.play(Sfx.Kind.CANCEL)
     }
 
+    /** Focuses row [index] of the column [categoryId] (Jump to Letter). */
+    fun focusRow(categoryId: String, index: Int) = renderer.post { r ->
+        val m = r.model ?: return@post
+        val cat = m.category(categoryId) ?: return@post
+        if (m.categories.indexOf(cat).let(m::setCategory) or cat.setFocus(index)) { sfx.play(Sfx.Kind.CURSOR); a11y.contentChanged() }
+    }
+
     /** Closes the panel without a choice, if it's showing (e.g. on back). */
     fun cancelOptions() = renderer.post(::cancelOptionsNow)
 
@@ -145,18 +154,20 @@ class XmbView(
         val options = optionsFor(item) ?: return
         r.openOptions(options)
         sfx.play(Sfx.Kind.OPTION)
+        a11y.optionsChanged(open = true)
     }
 
     // The *Now functions run on the GL thread. Input is decided there, in queue order, so a key
     // pressed right after the one that opens the panel already goes to the panel.
 
-    private fun moveOptionNow(r: XmbRenderer, delta: Int) { if (r.moveOption(delta)) sfx.play(Sfx.Kind.CURSOR) }
+    private fun moveOptionNow(r: XmbRenderer, delta: Int) { if (r.moveOption(delta)) { sfx.play(Sfx.Kind.CURSOR); a11y.contentChanged() } }
     private fun moveOption(delta: Int) = renderer.post { moveOptionNow(it, delta) }
 
     private fun chooseOptionNow(r: XmbRenderer, index: Int = -1) {
         if (index >= 0) r.setOption(index)
         val entry = r.chooseOption() ?: return
         sfx.play(Sfx.Kind.DECIDE)
+        a11y.optionsChanged(open = false)
         post { entry.onSelect() }
     }
 
@@ -164,6 +175,7 @@ class XmbView(
         if (!r.optionsShowing) return
         r.closeOptions(cancelled = true)
         sfx.play(Sfx.Kind.CANCEL)
+        a11y.optionsChanged(open = false)
     }
 
     /** Moves focus and plays the tick if anything actually moved. */
@@ -311,7 +323,18 @@ class XmbView(
         KeyEvent.KEYCODE_DPAD_DOWN -> moveNow(r, 0, 1)
         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> openNow(r)
         KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_MENU -> showOptionsFor(r)
+        // A page at a time, like L1/R1 in a long PS3 list.
+        KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_BUTTON_L1 -> moveNow(r, 0, -PAGE_ROWS)
+        KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_BUTTON_R1 -> moveNow(r, 0, PAGE_ROWS)
+        in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> jumpToLetterNow(r, ('A' + (keyCode - KeyEvent.KEYCODE_A)).toString())
         else -> Unit // back with nothing open: home stays home
+    }
+
+    /** Typing a letter on a keyboard jumps to the first row starting with it, if there is one. */
+    private fun jumpToLetterNow(r: XmbRenderer, letter: String) {
+        val cat = r.model?.focused ?: return
+        val index = cat.letters().firstOrNull { it.first == letter }?.second ?: return
+        if (cat.setFocus(index)) { sfx.play(Sfx.Kind.CURSOR); a11y.contentChanged() }
     }
 
     private companion object {
@@ -319,7 +342,11 @@ class XmbView(
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B,
             KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_BACK,
-        )
+            KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1,
+        ) + (KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z)
+
+        /** Rows skipped by Page Up/Down and L1/R1. */
+        const val PAGE_ROWS = 10
 
         /** Fraction of the on-screen spacing a finger must travel per step (<1 feels lighter). */
         const val DRAG_STEP_FRACTION = 0.6f

@@ -32,6 +32,12 @@ class XmbModelTest {
         assertEquals(1, m.categories[1].focus)
     }
 
+    @Test fun lettersGroupByFirstCharacter() {
+        val c = XmbCategory("apps", "Apps", Glyph.APPS, listOf("9Gag", "Alpha", "apex", "Beta", " chrome", "Éclair").map { XmbItem(it, it) })
+        assertEquals(listOf("#" to 0, "A" to 1, "B" to 3, "C" to 4, "É" to 5), c.letters())
+        assertEquals(emptyList<Pair<String, Int>>(), XmbCategory("e", "E", Glyph.APPS).letters())
+    }
+
     @Test fun emptyColumnIgnoresVerticalMoves() {
         val c = model().categories[2]
         assertFalse(c.moveFocus(1))

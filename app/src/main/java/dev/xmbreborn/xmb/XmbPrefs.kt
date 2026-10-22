@@ -1,10 +1,28 @@
 package dev.xmbreborn.xmb
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 
-/** The launcher's own settings, as on the PS3's Theme and Sound settings. */
+/**
+ * The launcher's own settings, as on the PS3's Theme and Sound settings. Those worth keeping on a
+ * new phone live in "xmb" (Android's backup and [export] carry them); ones tied to this device -
+ * a folder permission, a boot count - in "xmb_device", which neither does.
+ */
 class XmbPrefs(context: Context) {
     private val p = context.getSharedPreferences("xmb", Context.MODE_PRIVATE)
+    private val device = context.getSharedPreferences("xmb_device", Context.MODE_PRIVATE)
+
+    init {
+        // 0.4.1 and earlier kept these in "xmb".
+        if (p.contains("ps3Folder") || p.contains("chimeBoot")) {
+            device.edit().apply {
+                p.getString("ps3Folder", null)?.let { putString("ps3Folder", it) }
+                if (p.contains("chimeBoot")) putInt("chimeBoot", p.getInt("chimeBoot", -1))
+            }.apply()
+            p.edit().remove("ps3Folder").remove("chimeBoot").apply()
+        }
+    }
 
     /** [ORIGINAL] follows the month, as the PS3's "Original" colour; 0..11 pins one month's colour. */
     var color: Int
@@ -43,25 +61,65 @@ class XmbPrefs(context: Context) {
 
     /** The device boot the start-up sound last played in. */
     var chimeBoot: Int
-        get() = p.getInt("chimeBoot", -1)
-        set(v) = p.edit().putInt("chimeBoot", v).apply()
+        get() = device.getInt("chimeBoot", -1)
+        set(v) = device.edit().putInt("chimeBoot", v).apply()
 
     /** Tree URI of the folder ARMSX3's Frontend Export writes its .ps3 files to, or null. */
     var ps3Folder: String?
-        get() = p.getString("ps3Folder", null)
-        set(v) = p.edit().putString("ps3Folder", v).apply()
+        get() = device.getString("ps3Folder", null)
+        set(v) = device.edit().putString("ps3Folder", v).apply()
 
     /** Show the floating "+" for adding widgets (adding from a row's options always works). */
     var widgetButton: Boolean
         get() = p.getBoolean("widgetButton", true)
         set(v) = p.edit().putBoolean("widgetButton", v).apply()
 
+    /** Draw the PS3's date-and-time bar; off by default, as the status bar already shows the time. */
+    var clock: Boolean
+        get() = p.getBoolean("clock", false)
+        set(v) = p.edit().putBoolean("clock", v).apply()
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()
 
+    /** Everything in "xmb" as a small JSON file (Settings > Backup > Save Backup). */
+    fun export(): String = JSONObject().apply {
+        put("app", "XMB Reborn")
+        put("version", BACKUP_VERSION)
+        put("color", color)
+        put("ambient", ambient)
+        put("sounds", sounds)
+        put("chime", chime)
+        put("widgetButton", widgetButton)
+        put("clock", clock)
+        put("hidden", JSONArray(hidden.sorted()))
+        put("recent", JSONObject().apply { recent.forEach { (id, at) -> put(id, at) } })
+    }.toString(2)
+
+    /** Replaces these settings with a backup's; throws [IllegalArgumentException] if it isn't one. */
+    fun import(text: String) {
+        val o = runCatching { JSONObject(text) }.getOrNull()
+        require(o != null && o.optString("app") == "XMB Reborn") { "Not an XMB Reborn backup" }
+        require(o.optInt("version") in 1..BACKUP_VERSION) { "Backup is from a newer version" }
+        val hidden = o.optJSONArray("hidden")?.let { a -> (0 until a.length()).map(a::getString).toSet() } ?: emptySet()
+        val recent = o.optJSONObject("recent")?.let { r -> r.keys().asSequence().associateWith { r.getLong(it) } } ?: emptyMap()
+        p.edit()
+            .putInt("color", o.optInt("color", ORIGINAL).coerceIn(ORIGINAL, 11))
+            .putBoolean("ambient", o.optBoolean("ambient", true))
+            .putBoolean("sounds", o.optBoolean("sounds", true))
+            .putBoolean("chime", o.optBoolean("chime", true))
+            .putBoolean("widgetButton", o.optBoolean("widgetButton", true))
+            .putBoolean("clock", o.optBoolean("clock", false))
+            .putStringSet("hidden", hidden)
+            .putString("recent", recent.entries.sortedByDescending { it.value }.take(RECENT_KEEP)
+                .joinToString("\n") { "${it.value} ${it.key}" })
+            .apply()
+    }
+
     companion object {
         const val ORIGINAL = -1
         const val RECENT_KEEP = 60
+        const val BACKUP_VERSION = 1
     }
 }

@@ -79,5 +79,16 @@ class XmbLayout(val width: Float, val height: Float) {
     companion object {
         fun closeness(distance: Float) = max(0f, 1f - abs(distance))
         fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
+
+        /**
+         * Where the options panel's first row goes: [measured] (under the focused bar row), pulled
+         * up if the list would run off the bottom. A list too long for [top]..[bottom] at all
+         * scrolls instead, keeping row [focus] central but never leaving a gap at either end.
+         */
+        fun optionsFirstY(measured: Float, count: Int, focus: Int, step: Float, top: Float, bottom: Float): Float {
+            val rest = measured.coerceAtMost(bottom - (count - 0.5f) * step).coerceAtLeast(top)
+            if (rest + (count - 1) * step <= bottom) return rest
+            return ((top + bottom) / 2f - focus * step).coerceIn(bottom - (count - 1) * step, top)
+        }
     }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older. Only the portable settings: widget ids, folder permissions and boot
+     counts mean nothing on another phone. -->
+<full-backup-content>
+    <include domain="sharedpref" path="xmb.xml" />
+</full-backup-content>

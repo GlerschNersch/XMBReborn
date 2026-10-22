@@ -43,6 +43,20 @@ class XmbCategory(
     }
 
     val focusedItem: XmbItem? get() = items.getOrNull(focus)
+
+    /** Each starting letter in list order, with the first row under it: "#" for digits and symbols. */
+    fun letters(): List<Pair<String, Int>> {
+        val seen = LinkedHashMap<String, Int>()
+        items.forEachIndexed { i, item -> seen.getOrPut(letterOf(item.title)) { i } }
+        return seen.map { (letter, index) -> letter to index }
+    }
+
+    companion object {
+        fun letterOf(title: String): String {
+            val c = title.trimStart().firstOrNull()?.uppercaseChar() ?: return "#"
+            return if (c.isLetter()) c.toString() else "#"
+        }
+    }
 }
 
 /** The whole bar: which column is focused. No wrap-around at either end, as on the PS3. */

@@ -21,6 +21,7 @@ import dev.xmbreborn.xmb.Launch
 import dev.xmbreborn.xmb.MonthPalette
 import dev.xmbreborn.xmb.OptionEntry
 import dev.xmbreborn.xmb.Ps3Library
+import dev.xmbreborn.xmb.XmbCategory
 import dev.xmbreborn.xmb.XmbItem
 import dev.xmbreborn.xmb.XmbMetrics
 import dev.xmbreborn.xmb.XmbModel
@@ -74,7 +75,7 @@ class MainActivity : Activity() {
         setContentView(root)
         trays = WidgetTrays(this, root, view) { prefs.widgetButton }
         view.requestFocus()
-        view.renderer.post { it.themeColor = prefs.color }
+        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock }
         view.renderer.onWantBackground = { id -> loader.execute { loadGameBackground(id) } }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Home ignores back, except to close the options panel.
@@ -240,11 +241,29 @@ class MainActivity : Activity() {
             add(OptionEntry("App Info") {
                 runCatching { launcherApps.startAppDetailsActivity(launch.component, launch.user, null, null) }
             })
+            jumpToLetterEntry()?.let(::add)
             add(addWidgetEntry())
             add(OptionEntry("Hide") { prefs.setHidden(item.id, true); reload() })
             if (!isSystemApp(launch.component.packageName)) add(OptionEntry("Uninstall") { uninstall(item, launch) })
         })
         else -> null
+    }
+
+    /**
+     * In a long column (Apps A-Z), a second panel listing its starting letters; choosing one jumps
+     * to the first row under it. Built on the GL thread, like the options it's added to.
+     */
+    private fun jumpToLetterEntry(): OptionEntry? {
+        val column = view.renderer.model?.focused ?: return null
+        val letters = column.letters()
+        if (column.items.size < JUMP_MIN_ROWS || letters.size < 2) return null
+        val here = XmbCategory.letterOf(column.focusedItem?.title.orEmpty())
+        return OptionEntry("Jump to Letter") {
+            view.showOptions(XmbOptions(
+                letters.map { (letter, index) -> OptionEntry(letter) { view.focusRow(column.id, index) } },
+                initial = letters.indexOfFirst { it.first == here }.coerceAtLeast(0),
+            ))
+        }
     }
 
     /** Adds a widget to the tray of the column these options were opened in. */
@@ -296,6 +315,11 @@ class MainActivity : Activity() {
         XmbSources.SETTING_CHIME -> if (BootChime.file(this) == null) XmbOptions(listOf(OptionEntry("No sound file") {}))
             else onOff(prefs.chime) { on -> prefs.chime = on; if (!on) chime.stop() }
         XmbSources.SETTING_WIDGET_BUTTON -> onOff(prefs.widgetButton) { on -> prefs.widgetButton = on }
+        XmbSources.SETTING_CLOCK -> onOff(prefs.clock) { on -> prefs.clock = on; view.renderer.post { it.showClock = on } }
+        XmbSources.SETTING_BACKUP -> XmbOptions(listOf(
+            OptionEntry("Save Backup") { saveBackup() },
+            OptionEntry("Restore Backup") { restoreBackup() },
+        ))
         XmbSources.SETTING_SOUNDS -> onOff(prefs.sounds) { on ->
             prefs.sounds = on
             sfx.enabled = on
@@ -306,6 +330,59 @@ class MainActivity : Activity() {
             else XmbOptions(hidden.map { app -> OptionEntry("Show ${app.title}") { prefs.setHidden(app.id, false); reload() } })
         }
         else -> error("Unknown setting $key")
+    }
+
+    /**
+     * Settings, hidden apps and recent order to a JSON file of the user's choosing. Widgets and the
+     * PS3 folder aren't included: Android ties both to this install.
+     */
+    private fun saveBackup() {
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/json")
+            .putExtra(Intent.EXTRA_TITLE, "xmbreborn-backup.json")
+        startForResult(intent, REQUEST_BACKUP_SAVE)
+    }
+
+    private fun restoreBackup() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*") // some file managers don't tag .json as application/json
+        startForResult(intent, REQUEST_BACKUP_RESTORE)
+    }
+
+    private fun startForResult(intent: Intent, request: Int) {
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, request)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No file picker on this device", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun onBackupResult(request: Int, uri: Uri) {
+        val result = runCatching {
+            if (request == REQUEST_BACKUP_SAVE) {
+                contentResolver.openOutputStream(uri, "wt")!!.use { it.write(prefs.export().toByteArray()) }
+                "Backup saved"
+            } else {
+                val text = contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() }
+                prefs.import(text)
+                applySettings()
+                "Backup restored"
+            }
+        }
+        val message = result.getOrElse { e -> (e as? IllegalArgumentException)?.message ?: "Couldn't read or write that file" }
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    /** After a restore: every setting takes effect at once, as if chosen one by one. */
+    private fun applySettings() {
+        sfx.enabled = prefs.sounds
+        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock }
+        updateAmbient()
+        if (!prefs.chime) chime.stop()
+        reload()
     }
 
     /** ARMSX3's Frontend Export folder, picked with the system's folder picker (read access only). */
@@ -324,6 +401,10 @@ class MainActivity : Activity() {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
         if (trays.onActivityResult(requestCode, resultCode)) return
+        if ((requestCode == REQUEST_BACKUP_SAVE || requestCode == REQUEST_BACKUP_RESTORE) && resultCode == RESULT_OK) {
+            data?.data?.let { onBackupResult(requestCode, it) }
+            return
+        }
         if (requestCode != REQUEST_PS3_FOLDER || resultCode != RESULT_OK) return
         val tree = data?.data ?: return
         runCatching { contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -351,7 +432,11 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQUEST_PS3_FOLDER = 31
+        const val REQUEST_BACKUP_SAVE = 32
+        const val REQUEST_BACKUP_RESTORE = 33
         const val RESCAN_MS = 30_000L
+        /** Columns at least this long offer Jump to Letter. */
+        const val JUMP_MIN_ROWS = 12
         const val ARMSX3_URL = "https://github.com/ARMSX2/ARMSX3/releases"
         const val TAG = "XmbReborn"
     }

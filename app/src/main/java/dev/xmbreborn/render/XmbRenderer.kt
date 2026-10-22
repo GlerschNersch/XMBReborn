@@ -62,6 +62,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
     @Volatile var labelScale = 1f
     /** Rows show icons only (e.g. beside a wide tray of widgets). */
     @Volatile var labelsHidden = false
+    /** The PS3's date-and-time bar at the top right (Settings > Date and Time; off by default). */
+    @Volatile var showClock = false
 
     /** Height of the system bar over the top of the surface, so the clock stays below it. */
     var topInset = 0f
@@ -80,6 +82,9 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private var optionsAge = 0f
     private var dim = 0f
     private var panel = 0f
+    /** Where the panel's first row is drawn; eases toward its goal when a long list scrolls. */
+    private var optionsFirst = Float.NaN
+    private var lastDt = 0f
 
     /** For the UI thread: whether input should go to the options panel, and where its rows are. */
     @Volatile var optionsShowing = false
@@ -87,7 +92,11 @@ class XmbRenderer : GLSurfaceView.Renderer {
     @Volatile var optionRows = OptionRows(0f, 0f, 1f, 0)
         private set
 
-    class OptionRows(val panelX: Float, val firstY: Float, val step: Float, val count: Int) {
+    /** Where the panel's rows are drawn, plus their labels and which is focused (for accessibility). */
+    class OptionRows(
+        val panelX: Float, val firstY: Float, val step: Float, val count: Int,
+        val labels: List<String> = emptyList(), val focus: Int = -1,
+    ) {
         fun indexAt(y: Float): Int = Math.round((y - firstY) / step).takeIf { it in 0 until count } ?: -1
     }
 
@@ -96,6 +105,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         options = o
         optionsOpen = true
         optionsAge = 0f
+        optionsFirst = Float.NaN
         optionsShowing = true
         o.focused?.onFocus?.invoke()
     }
@@ -212,6 +222,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val now = SystemClock.elapsedRealtimeNanos()
         val dt = ((now - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
         lastNanos = now
+        lastDt = dt
         val time = (now - startNanos) / 1e9f
         if (introNanos == 0L) introNanos = now
         val intro = (now - introNanos) / 1e9f
@@ -252,7 +263,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
             drawItem(model, p, if (focusedRow) introBar else faded, if (focusedRow) dim else 0f, shift = !layout.portrait)
         }
         cats.forEach { drawCategory(model, it, if (it.category == model.focus) introBar else faded) }
-        drawClock(cal, faded)
+        if (showClock) drawClock(cal, faded)
         drawOptions(panelX)
         sprites.end()
         lastPlacements = cats + items
@@ -334,19 +345,26 @@ class XmbRenderer : GLSurfaceView.Renderer {
 
         val step = M.OPTIONS_ROW * u
         val n = o.entries.size
-        // Under the focused row as measured, pulled up if a long list would run off the bottom.
-        val first = (layout.rowY(0f) + M.OPTIONS_BELOW_FOCUS * u)
-            .coerceAtMost(layout.height - (n - 0.5f) * step - 24f * u)
-            .coerceAtLeast(layout.anchorY + 14f * u)
+        val top = layout.anchorY + 14f * u
+        val bottom = layout.height - 24f * u
+        val goal = XmbLayout.optionsFirstY(layout.rowY(0f) + M.OPTIONS_BELOW_FOCUS * u, n, o.focus, step, top, bottom)
+        optionsFirst = if (optionsFirst.isNaN()) goal
+            else optionsFirst + (goal - optionsFirst) * (1f - exp(-lastDt / M.OPTIONS_TIME_CONSTANT))
+        val first = optionsFirst
         val size = M.OPTIONS_TEXT_SIZE * u
         o.entries.forEachIndexed { i, e ->
-            val t = textures.text(e.label, size, maxWidth = layout.width - restX - (M.OPTIONS_TEXT_X + M.LABEL_EDGE_MARGIN) * u)
             val y = first + i * step
-            val a = panel * if (i == o.focus) 1f else M.OPTIONS_UNFOCUSED
+            // Rows scrolled past either end fade out over one row.
+            val edge = minOf((y - (top - step)) / step, ((bottom + step) - y) / step).coerceIn(0f, 1f)
+            if (edge <= 0f) return@forEachIndexed
+            val t = textures.text(e.label, size, maxWidth = layout.width - restX - (M.OPTIONS_TEXT_X + M.LABEL_EDGE_MARGIN) * u)
+            val a = edge * panel * if (i == o.focus) 1f else M.OPTIONS_UNFOCUSED
             sprites.draw(t.id, x + M.OPTIONS_TEXT_X * u - TextureCache.padFor(size), y - t.height / 2f,
                 t.width.toFloat(), t.height.toFloat(), a)
         }
-        optionRows = OptionRows(x, first, step, n)
+        val shown = optionRows
+        if (shown.panelX != x || shown.firstY != first || shown.count != n || shown.focus != o.focus || shown.labels.size != o.entries.size)
+            optionRows = OptionRows(x, first, step, n, o.entries.map { it.label }, o.focus)
     }
 
     /** White, opaque for the first stretch then falling linearly to clear (scaled at draw time). */
