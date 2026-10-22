@@ -109,11 +109,14 @@ class WidgetTrays(
         button.alpha = optionsAlpha
         button.isEnabled = optionsAlpha > 0.5f
         button.visibility = if (showButton()) View.VISIBLE else View.GONE
+        // Inside an open folder every tray steps aside, as the other columns do.
+        val folder = xmb.renderer.folderShift.coerceIn(0f, 1f)
         for ((column, holder) in holders) {
             val index = ids.indexOf(column)
-            // Slides and fades with the bar, including its move left into an open folder.
-            val d = if (index < 0) 99f else index - xmb.renderer.barScroll - xmb.renderer.folderShift
-            val a = (1f - abs(d) * XmbMetrics.ROW_FADE_RATE).coerceIn(0f, 1f) * optionsAlpha
+            // Slides and fades with the bar; into a folder, slides left with it while fading out.
+            val d = if (index < 0) 99f else index - xmb.renderer.barScroll - folder
+            val a = (1f - abs(index - xmb.renderer.barScroll) * XmbMetrics.ROW_FADE_RATE).coerceIn(0f, 1f) *
+                (1f - folder) * optionsAlpha
             val show = a > 0.01f && holder.childCount > 0
             val gate = holder.parent as Gate
             // Slides only while fading; fully faded it stays put (moving a view far off screen
@@ -126,7 +129,8 @@ class WidgetTrays(
         // tray, rows show icons only.
         val focused = focusedColumn()
         // While options are open the tray has stepped aside, so the list gets its full width back.
-        val hasTray = focused != null && ids(focused).isNotEmpty() && !xmb.renderer.optionsShowing
+        val hasTray = focused != null && ids(focused).isNotEmpty() && !xmb.renderer.optionsShowing &&
+            xmb.renderer.folderShift < 0.5f
         val state = if (!hasTray) "none" else "${left(focused!!)}:${wide(focused)}"
         if (state != listState) {
             listState = state

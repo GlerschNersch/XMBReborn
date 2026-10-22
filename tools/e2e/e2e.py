@@ -120,6 +120,7 @@ class Device:
 
 def test_tree(d):
     """The bar is visible to accessibility: categories, and rows under the focused one."""
+    d.home_intent()  # out of any open folder, which hides the other columns
     ns = d.nodes()
     cats = [n.text for n in ns if n.category]
     # Only icons on screen are exposed; in portrait that can be just two.
@@ -206,11 +207,15 @@ FOLDER_OF = {
 
 
 def walk_to(d, title):
-    """Moves down the current list until the focused row's title starts with [title]."""
-    for _ in range(30):
-        if (d.selected()[1] or "").startswith(title):
-            return
-        d.keys("DPAD_DOWN", pause=0.4)
+    """Moves through the current list (down, then up) until the focused row starts with [title]."""
+    for key in ("DPAD_DOWN", "DPAD_UP"):
+        for _ in range(30):
+            if (d.selected()[1] or "").startswith(title):
+                return
+            before = d.selected()[1]
+            d.keys(key, pause=0.4)
+            if d.selected()[1] == before:
+                break  # reached the end
     raise Fail(f"no row {title!r}")
 
 
