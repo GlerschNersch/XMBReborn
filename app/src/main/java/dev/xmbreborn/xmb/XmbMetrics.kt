@@ -11,7 +11,7 @@ object XmbMetrics {
     // Where the focused column and the bar sit, as fractions of the screen.
     const val ANCHOR_X_LANDSCAPE = 0.295f   // focused column centre x = 378
     const val ANCHOR_Y_LANDSCAPE = 0.268f   // bar centre y = 193
-    const val ANCHOR_X_PORTRAIT = 0.22f
+    const val ANCHOR_X_PORTRAIT = 0.14f
     const val ANCHOR_Y_PORTRAIT = 0.20f
 
     // Horizontal bar.
