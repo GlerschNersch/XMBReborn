@@ -488,6 +488,7 @@ class WidgetTrays(
         val target = columns.getOrNull(columns.indexOf(card.column) + dir) ?: return false
         card.abandon()
         showRemoveZone(false)
+        reclip()
         card.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
         save(card.column, ids(card.column) - card.widgetId)
         save(target, ids(target) + card.widgetId)
@@ -504,8 +505,26 @@ class WidgetTrays(
         return (0 until col.childCount).map { col.getChildAt(it) }
     }
 
+    /** Containers whose clipping a drag turned off, to turn back on when it ends. */
+    private val unclipped = ArrayList<ViewGroup>()
+
+    /** Lets the lifted widget draw outside its tray, so it stays in sight all the way to Remove. */
+    private fun unclip(card: View) {
+        var v = card.parent as? ViewGroup
+        while (v != null && v !== root) {
+            if (v.clipChildren) { v.clipChildren = false; unclipped += v }
+            v = v.parent as? ViewGroup
+        }
+    }
+
+    private fun reclip() {
+        unclipped.forEach { it.clipChildren = true }
+        unclipped.clear()
+    }
+
     private fun startDrag(card: DragCard) {
         showRemoveZone(true)
+        unclip(card)
         dragFrom = stack(card).indexOf(card)
         dragTarget = dragFrom
         card.animate().scaleX(1.04f).scaleY(1.04f).alpha(0.9f).translationZ(dp(12).toFloat()).setDuration(120).start()
@@ -543,6 +562,7 @@ class WidgetTrays(
     /** Drops it in the slot opened for it, saves the new order and rebuilds the tray. */
     private fun endDrag(card: DragCard, rawX: Float, rawY: Float) {
         edgeSince = 0L
+        reclip()
         val remove = overRemove || isOverRemove(rawX, rawY)
         showRemoveZone(false)
         if (remove) {

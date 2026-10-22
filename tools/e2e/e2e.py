@@ -520,8 +520,11 @@ def test_text_size(d):
 
 
 def long_press_focused(d):
+    """Long-presses the focused row on its icon (its node runs to the screen edge, under any widget)."""
     row = next(n for n in d.nodes() if not n.category and n.selected and n.text != "+")
-    d.sh(f"input motionevent DOWN {row.center[0]} {row.center[1]}; sleep 1; input motionevent UP {row.center[0]} {row.center[1]}")
+    x = row.bounds[0] + (row.bounds[3] - row.bounds[1]) // 2
+    y = row.center[1]
+    d.sh(f"input motionevent DOWN {x} {y}; sleep 1; input motionevent UP {x} {y}")
     time.sleep(1.3)
 
 
@@ -572,7 +575,7 @@ def widget_cards(d):
 def test_remove_widget_by_drag(d):
     """Dragging a widget onto the Remove target that appears at the top takes it off home."""
     before = len(widget_cards(d))
-    add_widget(d, "Game", "Analog")
+    add_widget(d, "Game", "Chrome Dino")  # no set-up screen of its own
     cards = widget_cards(d)
     check(len(cards) >= 1, "the new widget isn't showing")
     title, x1, y1, x2, y2 = cards[0]
