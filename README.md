@@ -27,8 +27,9 @@ Requires Android 10 or newer and OpenGL ES 3.
 
 ## Using it
 
-- **Swipe sideways** to change category and **up and down** to move through a list. Tap a row to
-  focus it, then tap it again to open it. D-pads and game controllers work too: Ⓐ opens, Ⓑ goes
+- **Swipe sideways** to change category and **up and down** to move through a list. **Flick** to
+  run down a long list; touch the screen to stop it. Tap a row to focus it, then tap it again to
+  open it. D-pads and game controllers work too: Ⓐ opens, Ⓑ goes
   back, and Ⓨ/Menu opens options.
 - **Long-press** a row (or press Ⓨ/Menu) for its options: Open, the app's own shortcuts (like
   "New tab"), App Info, Add Widget Here, Hide, Uninstall.
@@ -45,6 +46,8 @@ Requires Android 10 or newer and OpenGL ES 3.
   - **Widget Button:** hide the round **+** (Add Widget Here in options still works).
   - **Hidden Apps:** bring back apps you've hidden.
   - Shortcuts into Android's own settings.
+- **TalkBack** reads the categories and rows; double-tap opens, and double-tap-and-hold shows
+  options.
 - Apps are grouped by the category the developer gave them (Photo, Music, Video, Game, Network),
   most recently opened first. **Apps** lists everything A–Z.
 
@@ -105,6 +108,7 @@ never part of the app. Delete the folder to go back to the built-in clicks.
 ```sh
 ./gradlew assembleRelease   # app/build/outputs/apk/release/app-release.apk
 ./gradlew testDebugUnitTest
+python -I tools/e2e/e2e.py  # end-to-end checks on an emulator (refuses real phones)
 ```
 
 Needs JDK 17 and the Android SDK (compileSdk 36). Release builds are signed with the key named

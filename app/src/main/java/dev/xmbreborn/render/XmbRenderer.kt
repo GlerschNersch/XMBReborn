@@ -33,7 +33,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private val textures = TextureCache()
     private val pending = ConcurrentLinkedQueue<(XmbRenderer) -> Unit>()
 
-    var model: XmbModel? = null
+    @Volatile var model: XmbModel? = null
         private set
     private var motion: XmbMotion? = null
     private var icons: Map<String, ItemIcon> = emptyMap()

@@ -6,6 +6,7 @@ import android.opengl.GLSurfaceView
 import android.os.Build
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import dev.xmbreborn.render.XmbRenderer
@@ -21,7 +22,8 @@ import kotlin.math.hypot
  * The launcher surface. Drags scroll the bar one column / row per spacing of travel (axis
  * locked after touch slop); taps focus, and a tap on the focused row opens it. A long press on
  * a row, or Triangle / Menu, opens its options panel; while that shows, input goes to it.
- * D-pad and gamepad buttons work too, for TV boxes and controllers.
+ * D-pad and gamepad buttons work too, for TV boxes and controllers. A quick flick up or down
+ * keeps a list going for a while, a row at a time, slowing as it goes.
  */
 @SuppressLint("ViewConstructor")
 class XmbView(
@@ -33,6 +35,48 @@ class XmbView(
 ) : GLSurfaceView(context) {
     val renderer = XmbRenderer()
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
+    private val minFling = ViewConfiguration.get(context).scaledMinimumFlingVelocity * FLING_MIN_FACTOR
+    private var velocity: VelocityTracker? = null
+
+    private val a11y = XmbAccessibility(this, renderer,
+        activate = { c, i, open -> renderer.post { r -> activateNow(r, c, i, open) } },
+        showOptions = { c, i -> renderer.post { r -> activateNow(r, c, i, open = false); showOptionsFor(r) } },
+    )
+
+    override fun getAccessibilityNodeProvider() = a11y
+    override fun dispatchHoverEvent(event: MotionEvent): Boolean {
+        val am = context.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        return if (am?.isTouchExplorationEnabled == true) a11y.onHover(event) else super.dispatchHoverEvent(event)
+    }
+
+    /** Remaining rows of a fling, and the gap before the next; each step plays the tick. */
+    private var flingLeft = 0
+    private var caughtFling = false
+    private var flingDir = 0
+    private var flingGap = 0L
+    private val flingStep = object : Runnable {
+        override fun run() {
+            if (flingLeft <= 0) return
+            flingLeft--
+            move(0, flingDir)
+            flingGap = (flingGap * FLING_SLOWDOWN).toLong().coerceAtMost(FLING_MAX_GAP_MS)
+            if (flingLeft > 0) postDelayed(this, flingGap)
+        }
+    }
+
+    private fun stopFling() { flingLeft = 0; removeCallbacks(flingStep) }
+
+    /** After a quick vertical flick, carries on by a number of rows that grows with its speed. */
+    private fun fling(vy: Float) {
+        if (kotlin.math.abs(vy) < minFling) return
+        val rowPx = M.ITEM_SPACING * renderer.lastLayout.unit
+        if (rowPx <= 0f) return
+        flingLeft = ((kotlin.math.abs(vy) * FLING_SECONDS) / rowPx).toInt().coerceAtMost(FLING_MAX_ROWS)
+        if (flingLeft <= 0) return
+        flingDir = if (vy < 0) 1 else -1
+        flingGap = FLING_FIRST_GAP_MS
+        post(flingStep)
+    }
 
     private var downX = 0f
     private var downY = 0f
@@ -126,7 +170,19 @@ class XmbView(
     private fun moveNow(r: XmbRenderer, dx: Int, dy: Int) {
         val m = r.model ?: return
         val moved = if (dx != 0) m.moveCategory(dx) else m.focused.moveFocus(dy)
-        if (moved) sfx.play(Sfx.Kind.CURSOR)
+        if (moved) { sfx.play(Sfx.Kind.CURSOR); a11y.contentChanged() }
+        // A fling that hits the end of the list stops there.
+        else if (dy != 0) post(::stopFling)
+    }
+
+    /** Accessibility click / long-click: focus that column (and row), opening it if [open]. */
+    private fun activateNow(r: XmbRenderer, category: Int, item: Int, open: Boolean) {
+        cancelOptionsNow(r)
+        val m = r.model ?: return
+        var moved = m.setCategory(category)
+        if (item >= 0) moved = m.focused.setFocus(item) || moved
+        if (moved) { sfx.play(Sfx.Kind.CURSOR); a11y.contentChanged() }
+        if (open && item >= 0) openNow(r)
     }
     private fun move(dx: Int, dy: Int) = renderer.post { moveNow(it, dx, dy) }
 
@@ -140,8 +196,15 @@ class XmbView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        velocity?.addMovement(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // Touching the screen stops a fling where it is, like catching a list.
+                val caught = flingLeft > 0
+                stopFling()
+                velocity?.recycle()
+                velocity = VelocityTracker.obtain()
+                caughtFling = caught
                 downX = e.x; downY = e.y; axis = 0; applied = 0; longPressed = false
                 downOnOptions = renderer.optionsShowing
                 if (!downOnOptions) postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
@@ -157,11 +220,16 @@ class XmbView(
             }
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPress)
-                if (axis == 0 && !longPressed) {
+                if (axis == 0 && !longPressed && !caughtFling) {
                     if (downOnOptions) tapOptions(e.x, e.y) else tap(e.x, e.y)
                 }
+                if (axis == 2 && !downOnOptions && !longPressed) velocity?.let {
+                    it.computeCurrentVelocity(1000)
+                    fling(it.yVelocity)
+                }
+                velocity?.recycle(); velocity = null
             }
-            MotionEvent.ACTION_CANCEL -> removeCallbacks(longPress)
+            MotionEvent.ACTION_CANCEL -> { removeCallbacks(longPress); velocity?.recycle(); velocity = null }
         }
         return true
     }
@@ -255,5 +323,15 @@ class XmbView(
 
         /** Fraction of the on-screen spacing a finger must travel per step (<1 feels lighter). */
         const val DRAG_STEP_FRACTION = 0.6f
+
+        /** A flick must be this many times the system's minimum fling speed to carry on. */
+        const val FLING_MIN_FACTOR = 4
+        /** Rows a fling adds: its speed (px/s) times this, in row spacings. */
+        const val FLING_SECONDS = 0.35f
+        const val FLING_MAX_ROWS = 60
+        /** First gap between fling steps; each later one is [FLING_SLOWDOWN] times longer. */
+        const val FLING_FIRST_GAP_MS = 28L
+        const val FLING_SLOWDOWN = 1.09f
+        const val FLING_MAX_GAP_MS = 150L
     }
 }
