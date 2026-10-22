@@ -150,8 +150,13 @@ class XmbRenderer : GLSurfaceView.Renderer {
         }
         model = newModel
         columnIds = newModel.categories.map { it.id }
+        // Keep what's already on the GPU: only icons whose picture changed (an app updated) are
+        // uploaded again. Labels are keyed by their text and size, so they carry over as they are.
+        for ((id, old) in icons) {
+            val new = newIcons[id]
+            if (old is ItemIcon.Bitmap && (new !is ItemIcon.Bitmap || new.bitmap !== old.bitmap)) textures.dropIcon(id)
+        }
         icons = newIcons
-        textures.clear()
         motion = XmbMotion(newModel).also { it.snap() }
     }
 

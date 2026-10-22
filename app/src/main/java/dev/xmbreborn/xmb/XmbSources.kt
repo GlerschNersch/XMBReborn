@@ -24,6 +24,8 @@ sealed interface Launch {
     data class Shortcut(val pkg: String, val id: String, val user: UserHandle) : Launch
     /** A PS3 game, opened in ARMSX3 by its title id. */
     data class Ps3(val titleId: String?, val file: String?) : Launch
+    /** One of the user's own folders of apps in [column]; opening it shows them. */
+    data class UserFolder(val column: String, val id: String) : Launch
 }
 
 /** An item's picture: an app's own icon, or one of our glyphs. */
@@ -43,9 +45,26 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     /** PS3 games' PIC1 backgrounds, by item id, faded in behind the bar while one is focused. */
     val backgrounds = HashMap<String, Ps3Library.Pic1>()
 
+    private val iconCache = IconCache(context)
+    val userFolders = UserFolders(context)
+
+    /** [items] for [column] with the user's folders gathered in; [byName] re-sorts A-Z (Apps). */
+    private fun foldered(column: String, items: List<XmbItem>, byName: Boolean = false): List<XmbItem> {
+        val out = UserFolders.apply(items, userFolders.inColumn(column)) { f, members ->
+            icons[f.id] = ItemIcon.Of(Glyph.FOLDER)
+            XmbItem(f.id, f.name, if (members.size == 1) "1 app" else "${members.size} apps", Launch.UserFolder(column, f.id), members)
+        }
+        if (!byName) return out
+        val collator = Collator.getInstance()
+        return out.sortedWith { a, b -> collator.compare(a.title, b.title) }
+    }
+
     /** Apps left out of the bar because the user hid them, for the Hidden Apps setting. */
     @Volatile var hiddenApps: List<XmbItem> = emptyList()
         private set
+
+    /** "N apps, icons: x from memory, y from disk, z drawn" for the last [build], for the log. */
+    val lastBuildStats get() = "icons ${iconCache.hits} from memory, ${iconCache.diskHits} from disk, ${iconCache.misses} drawn"
 
     fun build(iconPx: Int): List<XmbCategory> {
         icons.clear()
@@ -54,20 +73,20 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val recent = prefs.recent
         // Category columns put what was opened last on top, like the PS3's Game column; the
         // Apps column stays A-Z so everything also has a fixed place.
-        fun appsIn(vararg cats: Int) = byRecency(apps.filter { it.category in cats }.map { it.item }, recent)
+        fun appsIn(column: String, vararg cats: Int) = foldered(column, byRecency(apps.filter { it.category in cats }.map { it.item }, recent))
         // PS3 games first: the scan also sets the count the PS3 Games setting shows.
         val games = byRecency(ps3Games() + apps.filter { it.category == ApplicationInfo.CATEGORY_GAME }.map { it.item }, recent)
         val settings = settingsItems()
         return listOf(
             XmbCategory("settings", "Settings", Glyph.SETTINGS, settings),
-            XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn(ApplicationInfo.CATEGORY_IMAGE)),
-            XmbCategory("music", "Music", Glyph.MUSIC, appsIn(ApplicationInfo.CATEGORY_AUDIO)),
-            XmbCategory("video", "Video", Glyph.VIDEO, appsIn(ApplicationInfo.CATEGORY_VIDEO)),
-            XmbCategory("game", "Game", Glyph.GAME, games),
+            XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn("photo", ApplicationInfo.CATEGORY_IMAGE)),
+            XmbCategory("music", "Music", Glyph.MUSIC, appsIn("music", ApplicationInfo.CATEGORY_AUDIO)),
+            XmbCategory("video", "Video", Glyph.VIDEO, appsIn("video", ApplicationInfo.CATEGORY_VIDEO)),
+            XmbCategory("game", "Game", Glyph.GAME, foldered("game", games)),
             XmbCategory("network", "Network", Glyph.NETWORK,
-                appsIn(ApplicationInfo.CATEGORY_SOCIAL, ApplicationInfo.CATEGORY_NEWS, ApplicationInfo.CATEGORY_MAPS)),
+                appsIn("network", ApplicationInfo.CATEGORY_SOCIAL, ApplicationInfo.CATEGORY_NEWS, ApplicationInfo.CATEGORY_MAPS)),
             XmbCategory("shortcuts", "Shortcuts", Glyph.FOLDER, pinnedShortcuts(iconPx, apps)),
-            XmbCategory("apps", "Apps", Glyph.APPS, apps.map { it.item }),
+            XmbCategory("apps", "Apps", Glyph.APPS, foldered("apps", apps.map { it.item }, byName = true)),
         ).filter { it.id != "shortcuts" || it.items.isNotEmpty() }
     }
 
@@ -77,6 +96,8 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val self = context.packageName
         val collator = Collator.getInstance()
         val out = ArrayList<LoadedApp>()
+        val cacheKeys = HashSet<String>()
+        iconCache.resetStats()
         val recent = prefs.recent
         val now = System.currentTimeMillis()
         for (user in launcherApps.profiles) {
@@ -84,12 +105,17 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
                 val component = info.componentName
                 if (component.packageName == self) continue
                 val id = "app:${component.flattenToShortString()}#${user.hashCode()}"
-                icons[id] = ItemIcon.Bitmap(rasterize(info.getBadgedIcon(0), iconPx))
+                // Drawing every icon is most of a rebuild's time; reuse it until the app updates.
+                val version = runCatching { context.packageManager.getPackageInfo(component.packageName, 0).lastUpdateTime }.getOrDefault(0L)
+                val bitmap = iconCache.get("$id@$iconPx", version) { rasterize(info.getBadgedIcon(0), iconPx) }
+                cacheKeys += "$id@$iconPx"
+                icons[id] = ItemIcon.Bitmap(bitmap)
                 // The focused row's info line, as the PS3 shows under a game: when it was last used.
                 val item = XmbItem(id, info.label.toString(), recent[id]?.let { lastOpened(it, now) }, Launch.App(component, user))
                 out.add(LoadedApp(item, info.applicationInfo.category))
             }
         }
+        iconCache.keepOnly(cacheKeys)
         out.sortWith { a, b -> collator.compare(a.item.title, b.item.title) }
         val hidden = prefs.hidden
         hiddenApps = out.filter { it.item.id in hidden }.map { it.item }
@@ -117,6 +143,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             )),
             folder("home", "Home Settings", "Widgets, hidden apps and backup", Glyph.HOME, listOf(
                 setting(SETTING_WIDGET_BUTTON, "Widget Button", onOff(prefs.widgetButton), Glyph.WIDGETS),
+                setting(SETTING_REMOVE_WIDGETS, "Remove Widgets", "Take widgets off the home screen", Glyph.WIDGETS),
                 setting(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }, Glyph.HIDDEN),
                 setting(SETTING_BACKUP, "Backup", "Save or restore settings", Glyph.BACKUP),
             )),
@@ -226,6 +253,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_PS3 = "ps3"
         const val SETTING_WIDGET_BUTTON = "widgetButton"
         const val SETTING_BACKUP = "backup"
+        const val SETTING_REMOVE_WIDGETS = "removeWidgets"
         const val SETTING_CLOCK = "clock"
         const val SETTING_SIZE = "size"
         const val SETTING_WALLPAPER = "wallpaper"

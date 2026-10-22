@@ -35,6 +35,9 @@ class TextureCache {
         return upload(renderText(text, sizePx, false, -1), mipmaps = false).also { slots[slot] = text to it }
     }
 
+    /** Forgets one icon's texture (its picture changed), so the next draw uploads it afresh. */
+    fun dropIcon(key: String) { map.remove("icon:$key")?.let { Gl.deleteTexture(it.id) } }
+
     fun clear() {
         slots.values.forEach { Gl.deleteTexture(it.second.id) }
         slots.clear()

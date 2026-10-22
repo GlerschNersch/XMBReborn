@@ -60,9 +60,70 @@ class WidgetTrays(
         setOnClickListener { focusedColumn()?.let(::add) }
     }
 
+    /** Shown at the top while a widget is lifted: let go over it to take the widget off home. */
+    private val removeZone: TextView = text("Remove", 15f).apply {
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        setPadding(dp(28), dp(12), dp(28), dp(12))
+        background = GradientDrawable().apply { cornerRadius = dp(24).toFloat() }
+        alpha = 0f
+        visibility = View.GONE
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+    private var overRemove = false
+
+    private fun showRemoveZone(show: Boolean) {
+        removeZone.animate().cancel()
+        if (show) {
+            setOverRemove(false)
+            removeZone.visibility = View.VISIBLE
+            removeZone.bringToFront()
+            removeZone.animate().alpha(1f).setDuration(120).start()
+        } else {
+            removeZone.animate().alpha(0f).setDuration(120).withEndAction { removeZone.visibility = View.GONE }.start()
+        }
+    }
+
+    private fun setOverRemove(over: Boolean) {
+        if (over && !overRemove) removeZone.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+        overRemove = over
+        (removeZone.background as GradientDrawable).apply {
+            setColor(if (over) Color.argb(220, 170, 30, 30) else Color.argb(170, 0, 0, 0))
+            setStroke(dp(1), if (over) Color.argb(255, 255, 120, 120) else Color.argb(90, 255, 255, 255))
+        }
+        removeZone.scaleX = if (over) 1.08f else 1f
+        removeZone.scaleY = removeZone.scaleX
+    }
+
+    private fun isOverRemove(rawX: Float, rawY: Float): Boolean {
+        if (removeZone.visibility != View.VISIBLE) return false
+        val loc = IntArray(2).also(removeZone::getLocationOnScreen)
+        val slack = dp(16)
+        return rawX >= loc[0] - slack && rawX <= loc[0] + removeZone.width + slack &&
+            rawY >= loc[1] - slack && rawY <= loc[1] + removeZone.height + slack
+    }
+
+    /** Takes widget [id] off [column]'s tray and releases it. */
+    fun remove(column: String, id: Int) {
+        val name = manager.getAppWidgetInfo(id)?.loadLabel(activity.packageManager)
+        host.deleteAppWidgetId(id)
+        save(column, ids(column) - id)
+        prefs.edit().remove("size:$id").remove("stack:$id").apply()
+        refill(column)
+        listState = ""
+        notice.show(if (name != null) "Removed $name" else "Widget removed", ok = true)
+    }
+
+    /** Every widget on home: (column, id, name), in bar order (Settings > Home Settings > Remove Widgets). */
+    fun allWidgets(): List<Triple<String, Int, String>> = xmb.renderer.columnIds.flatMap { column ->
+        ids(column).map { id -> Triple(column, id, manager.getAppWidgetInfo(id)?.loadLabel(activity.packageManager) ?: "Widget") }
+    }
+
     init {
         root.addView(button, FrameLayout.LayoutParams(dp(52), dp(52),
             Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(18), dp(56)) })
+        root.addView(removeZone, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(56) })
         // Rotating changes where trays go and how many columns they use.
         root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
             if (r - l != or_ - ol || b - t != ob - ot) root.post { holders.keys.forEach(::refill); listState = "" }
@@ -242,6 +303,7 @@ class WidgetTrays(
         val ids = ids(column)
         val at = ids.indexOf(id)
         val actions = buildList<Pair<String, () -> Unit>> {
+            add("Remove $name" to { remove(column, id) })
             if (at > 0) add("Move Up" to { save(column, ids.toMutableList().apply { removeAt(at); add(at - 1, id) }) })
             if (at in 0 until ids.lastIndex) add("Move Down" to { save(column, ids.toMutableList().apply { removeAt(at); add(at + 1, id) }) })
             if (size(id) < SIZES.lastIndex) add("Bigger" to { prefs.edit().putInt("size:$id", size(id) + 1).apply() })
@@ -250,7 +312,6 @@ class WidgetTrays(
                 prefs.edit().putBoolean("wide:$column", !wide(column)).apply()
                 listState = ""
             })
-            add("Remove $name" to { host.deleteAppWidgetId(id); save(column, ids - id) })
         }
         // In the XMB's own options panel, like every other row's options; Back cancels.
         xmb.showOptions(XmbOptions(actions.map { (label, action) -> OptionEntry(label) { action(); refill(column) } }))
@@ -378,7 +439,7 @@ class WidgetTrays(
                 val dy = ev.rawY - downY
                 if (kotlin.math.hypot(dx, dy) > slop) moved = true
                 when (ev.actionMasked) {
-                    MotionEvent.ACTION_MOVE -> moveDrag(this, dx, dy, ev.rawX)
+                    MotionEvent.ACTION_MOVE -> moveDrag(this, dx, dy, ev.rawX, ev.rawY)
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         dragging = false
                         endDrag(this, ev.rawX, ev.rawY)
@@ -423,6 +484,7 @@ class WidgetTrays(
         val columns = xmb.renderer.columnIds
         val target = columns.getOrNull(columns.indexOf(card.column) + dir) ?: return false
         card.abandon()
+        showRemoveZone(false)
         card.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
         save(card.column, ids(card.column) - card.widgetId)
         save(target, ids(target) + card.widgetId)
@@ -440,15 +502,18 @@ class WidgetTrays(
     }
 
     private fun startDrag(card: DragCard) {
+        showRemoveZone(true)
         dragFrom = stack(card).indexOf(card)
         dragTarget = dragFrom
         card.animate().scaleX(1.04f).scaleY(1.04f).alpha(0.9f).translationZ(dp(12).toFloat()).setDuration(120).start()
     }
 
     /** The lifted widget follows the finger; the others slide to open the gap where it would land. */
-    private fun moveDrag(card: DragCard, dx: Float, dy: Float, rawX: Float) {
+    private fun moveDrag(card: DragCard, dx: Float, dy: Float, rawX: Float, rawY: Float) {
         val views = stack(card)
         if (views.isEmpty()) return
+        setOverRemove(isOverRemove(rawX, rawY))
+        card.alpha = if (overRemove) 0.5f else 0.9f
         card.translationY = dy
         // Free sideways too where there's another stack to drop into (landscape).
         card.translationX = if (landscape) dx else 0f
@@ -475,6 +540,13 @@ class WidgetTrays(
     /** Drops it in the slot opened for it, saves the new order and rebuilds the tray. */
     private fun endDrag(card: DragCard, rawX: Float, rawY: Float) {
         edgeSince = 0L
+        val remove = overRemove || isOverRemove(rawX, rawY)
+        showRemoveZone(false)
+        if (remove) {
+            card.animate().cancel()
+            remove(card.column, card.widgetId)
+            return
+        }
         if (landscape && dropOnOtherStack(card, rawX, rawY)) return
         val views = stack(card)
         val from = dragFrom

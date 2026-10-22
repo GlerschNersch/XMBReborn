@@ -164,6 +164,9 @@ class XmbView(
         if (m.categories.indexOf(cat).let(m::setCategory) or cat.setFocus(index)) { sfx.play(Sfx.Kind.CURSOR); a11y.contentChanged() }
     }
 
+    /** Opens the focused row, as tapping it again would (an options panel's "Open"). */
+    fun openFocused() = renderer.post(::openNow)
+
     /** Closes the panel without a choice, if it's showing (e.g. on back). */
     fun cancelOptions() = renderer.post(::cancelOptionsNow)
 

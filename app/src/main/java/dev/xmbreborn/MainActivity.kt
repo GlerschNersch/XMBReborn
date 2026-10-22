@@ -158,9 +158,11 @@ class MainActivity : Activity() {
             resources.displayMetrics.heightPixels) / XmbMetrics.REF_SHORT_SIDE).toInt().coerceAtLeast(48)
         lastReload = android.os.SystemClock.elapsedRealtime()
         loader.execute {
+            val started = android.os.SystemClock.elapsedRealtime()
             val categories = runCatching { sources.build(iconPx) }
                 .onFailure { Log.e(TAG, "Loading the bar failed", it) }
                 .getOrNull() ?: return@execute
+            Log.i(TAG, "Bar built in ${android.os.SystemClock.elapsedRealtime() - started} ms (${sources.lastBuildStats})")
             val icons = HashMap(sources.icons)
             gameBackgrounds = HashMap(sources.backgrounds)
             val initial = categories.indexOfFirst { it.id == "apps" }.coerceAtLeast(0)
@@ -231,6 +233,15 @@ class MainActivity : Activity() {
             },
             addWidgetEntry(),
         ))
+        is Launch.UserFolder -> XmbOptions(listOf(
+            OptionEntry("Open") { view.openFocused() },
+            OptionEntry("Rename") { renameFolder(launch, item.title) },
+            OptionEntry("Delete Folder") {
+                sources.userFolders.delete(launch.column, launch.id)
+                reload()
+                notice.show("Folder deleted; its apps are back in the list", ok = true)
+            },
+        ))
         is Launch.App -> XmbOptions(buildList {
             add(OptionEntry("Open") { open(item) })
             // The app's own shortcuts ("New tab", "Navigate home"...), as other launchers show them.
@@ -245,6 +256,7 @@ class MainActivity : Activity() {
             })
             jumpToLetterEntry()?.let(::add)
             add(addWidgetEntry())
+            folderEntries(item).forEach(::add)
             add(OptionEntry("Hide") { prefs.setHidden(item.id, true); reload() })
             if (!isSystemApp(launch.component.packageName)) add(OptionEntry("Uninstall") { uninstall(item, launch) })
         })
@@ -266,6 +278,52 @@ class MainActivity : Activity() {
                 initial = letters.indexOfFirst { it.first == here }.coerceAtLeast(0),
             ))
         }
+    }
+
+    /**
+     * Filing the app away in the column these options were opened in: a new folder, one of the
+     * column's folders, or (inside a folder) back out. Built on the GL thread with the options.
+     */
+    private fun folderEntries(item: XmbItem): List<OptionEntry> {
+        val column = view.renderer.model?.focused ?: return emptyList()
+        if (column.id !in FOLDER_COLUMNS) return emptyList()
+        val inside = column.crumbs.lastOrNull()?.payload as? Launch.UserFolder
+        if (inside != null) return listOf(OptionEntry("Remove from Folder") {
+            sources.userFolders.takeOut(column.id, item.id)
+            reload()
+        })
+        val folders = sources.userFolders.inColumn(column.id)
+        return listOf(OptionEntry("New Folder") {
+            val names = folders.map { it.name }.toSet()
+            val name = generateSequence(1) { it + 1 }.map { if (it == 1) "New Folder" else "New Folder $it" }.first { it !in names }
+            sources.userFolders.create(column.id, name, item.id)
+            reload()
+            notice.show("Made \"$name\". Hold it to rename it.", ok = true)
+        }) + folders.take(MAX_MOVE_TARGETS).map { f ->
+            OptionEntry("Move to ${f.name}") {
+                sources.userFolders.moveInto(column.id, f.id, item.id)
+                reload()
+            }
+        }
+    }
+
+    /** Asks for a folder's new name with the system keyboard. */
+    private fun renameFolder(folder: Launch.UserFolder, current: String) {
+        val field = android.widget.EditText(this).apply {
+            setText(current)
+            setSelection(current.length)
+            isSingleLine = true
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Rename Folder")
+            .setView(field)
+            .setPositiveButton("Rename") { _, _ ->
+                val name = field.text.toString().trim()
+                if (name.isNotEmpty()) { sources.userFolders.rename(folder.column, folder.id, name); reload() }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        field.requestFocus()
     }
 
     /** Adds a widget to the tray of the column these options were opened in. */
@@ -333,6 +391,14 @@ class MainActivity : Activity() {
         XmbSources.SETTING_WALLPAPER -> XmbOptions(listOf(
             OptionEntry(if (sources.wallpaperIsOurs()) "Set Again" else "Use XMB Wallpaper") { chooseXmbWallpaper() },
         ))
+        XmbSources.SETTING_REMOVE_WIDGETS -> {
+            val widgets = trays.allWidgets()
+            val columns = view.renderer.model?.categories?.associate { it.id to it.title }.orEmpty()
+            if (widgets.isEmpty()) XmbOptions(listOf(OptionEntry("No widgets on home") {}))
+            else XmbOptions(widgets.map { (column, id, name) ->
+                OptionEntry("$name (${columns[column] ?: column})") { trays.remove(column, id) }
+            })
+        }
         XmbSources.SETTING_BACKUP -> XmbOptions(listOf(
             OptionEntry("Save Backup") { saveBackup() },
             OptionEntry("Restore Backup") { restoreBackup() },
@@ -464,6 +530,10 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQUEST_PS3_FOLDER = 31
+        /** Columns of apps, where folders can be made (not Settings or Shortcuts). */
+        val FOLDER_COLUMNS = setOf("photo", "music", "video", "game", "network", "apps")
+        /** "Move to" entries offered at most, so the panel stays short. */
+        const val MAX_MOVE_TARGETS = 6
         const val REQUEST_BACKUP_SAVE = 32
         const val REQUEST_BACKUP_RESTORE = 33
         const val RESCAN_MS = 30_000L
