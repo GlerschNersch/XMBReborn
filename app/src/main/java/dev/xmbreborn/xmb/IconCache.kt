@@ -39,6 +39,11 @@ class IconCache(context: Context) {
         return bmp
     }
 
+    /** Whether [key] at [version] is ready without drawing (in memory or on disk). */
+    @Synchronized
+    fun has(key: String, version: Long): Boolean =
+        memory[key]?.first == version || File(dir, fileName(key, version)).isFile
+
     /** Drops what the last build didn't ask for (uninstalled apps), memory and disk alike. */
     @Synchronized
     fun keepOnly(keys: Set<String>) {

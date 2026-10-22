@@ -86,6 +86,11 @@ class XmbPrefs(context: Context) {
 
     val sizeScale: Float get() = SIZES[size]
 
+    /** Show the phone's photo and video albums in the Photo and Video columns (needs permission). */
+    var media: Boolean
+        get() = p.getBoolean("media", false)
+        set(v) = p.edit().putBoolean("media", v).apply()
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()

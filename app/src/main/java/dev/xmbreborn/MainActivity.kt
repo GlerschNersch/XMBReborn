@@ -157,17 +157,23 @@ class MainActivity : Activity() {
         val iconPx = (XmbMetrics.ITEM_ICON_FOCUSED * minOf(resources.displayMetrics.widthPixels,
             resources.displayMetrics.heightPixels) / XmbMetrics.REF_SHORT_SIDE).toInt().coerceAtLeast(48)
         lastReload = android.os.SystemClock.elapsedRealtime()
-        loader.execute {
+        loader.execute { build(iconPx, drawThumbnails = false) }
+    }
+
+    /** One rebuild on the loader thread; if photo thumbnails were left out, another fills them in. */
+    private fun build(iconPx: Int, drawThumbnails: Boolean) {
+        run {
             val started = android.os.SystemClock.elapsedRealtime()
-            val categories = runCatching { sources.build(iconPx) }
+            val categories = runCatching { sources.build(iconPx, drawThumbnails) }
                 .onFailure { Log.e(TAG, "Loading the bar failed", it) }
-                .getOrNull() ?: return@execute
+                .getOrNull() ?: return
             Log.i(TAG, "Bar built in ${android.os.SystemClock.elapsedRealtime() - started} ms (${sources.lastBuildStats})")
             val icons = HashMap(sources.icons)
             gameBackgrounds = HashMap(sources.backgrounds)
             val initial = categories.indexOfFirst { it.id == "apps" }.coerceAtLeast(0)
             val backgroundIds = gameBackgrounds.keys.toSet()
             view.renderer.post { it.setModel(XmbModel(categories, initial), icons, backgroundIds) }
+            if (sources.thumbnailsPending && !drawThumbnails) loader.execute { build(iconPx, drawThumbnails = true) }
         }
     }
 
@@ -204,6 +210,9 @@ class MainActivity : Activity() {
                 is Launch.Action -> startActivity(Intent(launch.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 is Launch.Setting -> view.showOptions(settingOptions(launch.key))
                 is Launch.Shortcut -> launcherApps.startShortcut(launch.pkg, launch.id, null, null, launch.user)
+                is Launch.Media -> startActivity(Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(Uri.parse(launch.uri), if (launch.video) "video/*" else "image/*")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
                 is Launch.Ps3 -> {
                     val emulator = Ps3Library.emulator(packageManager)
                     if (emulator == null) notice.show("Install ARMSX3 to play PS3 games", ok = false)
@@ -307,6 +316,35 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Asks Android for the photo and video permissions; [onRequestPermissionsResult] takes the answer. */
+    private fun requestMedia() {
+        prefs.media = true
+        val wanted = if (android.os.Build.VERSION.SDK_INT >= 33)
+            arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES, android.Manifest.permission.READ_MEDIA_VIDEO)
+        else arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        if (sources.mediaAllowed()) { reload(); refreshSettings(); return }
+        requestPermissions(wanted, REQUEST_MEDIA)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_MEDIA) return
+        if (sources.mediaAllowed()) {
+            notice.show("Photos and videos will show in their columns", ok = true)
+        } else {
+            prefs.media = false
+            // Refused before with "don't ask again": the only way left is the app's settings page.
+            if (!shouldShowRequestPermissionRationale(permissions.firstOrNull() ?: "")) {
+                notice.show("Allow photos and videos in XMB Reborn's app settings", ok = false)
+                runCatching {
+                    startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                }
+            }
+        }
+        reload()
+        refreshSettings()
+    }
+
     /** Asks for a folder's new name with the system keyboard. */
     private fun renameFolder(folder: Launch.UserFolder, current: String) {
         val field = android.widget.EditText(this).apply {
@@ -391,6 +429,9 @@ class MainActivity : Activity() {
         XmbSources.SETTING_WALLPAPER -> XmbOptions(listOf(
             OptionEntry(if (sources.wallpaperIsOurs()) "Set Again" else "Use XMB Wallpaper") { chooseXmbWallpaper() },
         ))
+        XmbSources.SETTING_MEDIA -> onOff(sources.mediaAllowed()) { on ->
+            if (!on) { prefs.media = false; reload() } else requestMedia()
+        }
         XmbSources.SETTING_REMOVE_WIDGETS -> {
             val widgets = trays.allWidgets()
             val columns = view.renderer.model?.categories?.associate { it.id to it.title }.orEmpty()
@@ -530,6 +571,7 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQUEST_PS3_FOLDER = 31
+        const val REQUEST_MEDIA = 34
         /** Columns of apps, where folders can be made (not Settings or Shortcuts). */
         val FOLDER_COLUMNS = setOf("photo", "music", "video", "game", "network", "apps")
         /** "Move to" entries offered at most, so the panel stays short. */

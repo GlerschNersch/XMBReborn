@@ -24,6 +24,8 @@ sealed interface Launch {
     data class Shortcut(val pkg: String, val id: String, val user: UserHandle) : Launch
     /** A PS3 game, opened in ARMSX3 by its title id. */
     data class Ps3(val titleId: String?, val file: String?) : Launch
+    /** A photo or video from the phone's albums, opened in whichever app shows it. */
+    data class Media(val uri: String, val video: Boolean) : Launch
     /** One of the user's own folders of apps in [column]; opening it shows them. */
     data class UserFolder(val column: String, val id: String) : Launch
 }
@@ -66,10 +68,36 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
     /** "N apps, icons: x from memory, y from disk, z drawn" for the last [build], for the log. */
     val lastBuildStats get() = "icons ${iconCache.hits} from memory, ${iconCache.diskHits} from disk, ${iconCache.misses} drawn"
 
-    fun build(iconPx: Int): List<XmbCategory> {
+    /** Icon cache keys the current build used; the rest are dropped when it ends. */
+    private val usedIconKeys = HashSet<String>()
+
+    /** True if the last [build] left photo thumbnails out (not drawn yet); build again to fill them in. */
+    @Volatile var thumbnailsPending = false
+        private set
+
+    /** Whether albums can show: the setting is on and Android has granted access to photos/videos. */
+    fun mediaAllowed(): Boolean {
+        if (!prefs.media) return false
+        fun has(p: String) = context.checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        return if (android.os.Build.VERSION.SDK_INT >= 33)
+            has(android.Manifest.permission.READ_MEDIA_IMAGES) || has(android.Manifest.permission.READ_MEDIA_VIDEO) ||
+                (android.os.Build.VERSION.SDK_INT >= 34 && has(android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED))
+        else has(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
+    /**
+     * [drawThumbnails] false leaves thumbnails that aren't cached yet as plain icons (and sets
+     * [thumbnailsPending]), so the bar can show at once and fill them in with a second build.
+     */
+    fun build(iconPx: Int, drawThumbnails: Boolean = true): List<XmbCategory> {
         icons.clear()
         backgrounds.clear()
+        usedIconKeys.clear()
+        thumbnailsPending = false
         val apps = loadApps(iconPx)
+        val photoAlbums = if (mediaAllowed()) albums(video = false, iconPx, drawThumbnails) else emptyList()
+        val videoAlbums = if (mediaAllowed()) albums(video = true, iconPx, drawThumbnails) else emptyList()
+        iconCache.keepOnly(usedIconKeys)
         val recent = prefs.recent
         // Category columns put what was opened last on top, like the PS3's Game column; the
         // Apps column stays A-Z so everything also has a fixed place.
@@ -79,9 +107,9 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val settings = settingsItems()
         return listOf(
             XmbCategory("settings", "Settings", Glyph.SETTINGS, settings),
-            XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn("photo", ApplicationInfo.CATEGORY_IMAGE)),
+            XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn("photo", ApplicationInfo.CATEGORY_IMAGE) + photoAlbums),
             XmbCategory("music", "Music", Glyph.MUSIC, appsIn("music", ApplicationInfo.CATEGORY_AUDIO)),
-            XmbCategory("video", "Video", Glyph.VIDEO, appsIn("video", ApplicationInfo.CATEGORY_VIDEO)),
+            XmbCategory("video", "Video", Glyph.VIDEO, appsIn("video", ApplicationInfo.CATEGORY_VIDEO) + videoAlbums),
             XmbCategory("game", "Game", Glyph.GAME, foldered("game", games)),
             XmbCategory("network", "Network", Glyph.NETWORK,
                 appsIn("network", ApplicationInfo.CATEGORY_SOCIAL, ApplicationInfo.CATEGORY_NEWS, ApplicationInfo.CATEGORY_MAPS)),
@@ -96,7 +124,6 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val self = context.packageName
         val collator = Collator.getInstance()
         val out = ArrayList<LoadedApp>()
-        val cacheKeys = HashSet<String>()
         iconCache.resetStats()
         val recent = prefs.recent
         val now = System.currentTimeMillis()
@@ -108,14 +135,13 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
                 // Drawing every icon is most of a rebuild's time; reuse it until the app updates.
                 val version = runCatching { context.packageManager.getPackageInfo(component.packageName, 0).lastUpdateTime }.getOrDefault(0L)
                 val bitmap = iconCache.get("$id@$iconPx", version) { rasterize(info.getBadgedIcon(0), iconPx) }
-                cacheKeys += "$id@$iconPx"
+                usedIconKeys += "$id@$iconPx"
                 icons[id] = ItemIcon.Bitmap(bitmap)
                 // The focused row's info line, as the PS3 shows under a game: when it was last used.
                 val item = XmbItem(id, info.label.toString(), recent[id]?.let { lastOpened(it, now) }, Launch.App(component, user))
                 out.add(LoadedApp(item, info.applicationInfo.category))
             }
         }
-        iconCache.keepOnly(cacheKeys)
         out.sortWith { a, b -> collator.compare(a.item.title, b.item.title) }
         val hidden = prefs.hidden
         hiddenApps = out.filter { it.item.id in hidden }.map { it.item }
@@ -143,6 +169,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             )),
             folder("home", "Home Settings", "Widgets, hidden apps and backup", Glyph.HOME, listOf(
                 setting(SETTING_WIDGET_BUTTON, "Widget Button", onOff(prefs.widgetButton), Glyph.WIDGETS),
+                setting(SETTING_MEDIA, "Photos and Videos", onOff(mediaAllowed()), Glyph.PHOTO),
                 setting(SETTING_REMOVE_WIDGETS, "Remove Widgets", "Take widgets off the home screen", Glyph.WIDGETS),
                 setting(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }, Glyph.HIDDEN),
                 setting(SETTING_BACKUP, "Backup", "Save or restore settings", Glyph.BACKUP),
@@ -191,6 +218,43 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             icons[id] = icon?.let { ItemIcon.Bitmap(rasterize(it, iconPx)) } ?: ItemIcon.Of(Glyph.FOLDER)
             XmbItem(id, (info.shortLabel ?: info.id).toString(), appNames[info.`package`], Launch.Shortcut(info.`package`, info.id, info.userHandle))
         }
+    }
+
+    /**
+     * The phone's albums as folders, each holding its newest pictures or clips with thumbnails;
+     * an album's own icon is its newest picture, as on the PS3.
+     */
+    private fun albums(video: Boolean, iconPx: Int, draw: Boolean): List<XmbItem> {
+        val fallback = if (video) Glyph.VIDEO else Glyph.PHOTO
+        val dateFormat = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+        return MediaAlbums.load(context.contentResolver, video).map { album ->
+            val children = album.items.map { m ->
+                val id = "media:${if (video) "v" else "p"}:${m.id}"
+                icons[id] = thumbnail(m, iconPx, draw)?.let { ItemIcon.Bitmap(it) } ?: ItemIcon.Of(fallback)
+                val date = dateFormat.format(java.util.Date(m.modified * 1000))
+                XmbItem(id, m.name.substringBeforeLast('.'), if (video) "$date · ${MediaAlbums.duration(m.durationMs)}" else date,
+                    Launch.Media(m.uri.toString(), video))
+            }
+            val id = "album:${album.id}"
+            icons[id] = children.firstOrNull()?.let { icons[it.id] } ?: ItemIcon.Of(fallback)
+            val count = "${album.total} ${if (video) (if (album.total == 1) "video" else "videos") else (if (album.total == 1) "photo" else "photos")}"
+            XmbItem(id, album.name, count, children = children)
+        }
+    }
+
+    /** A square thumbnail at icon size, centre-cropped, from the cache when it's there. */
+    private fun thumbnail(m: MediaAlbums.Media, px: Int, draw: Boolean): Bitmap? {
+        val key = "media:${m.uri}@$px"
+        usedIconKeys += key
+        if (!draw && !iconCache.has(key, m.modified)) { thumbnailsPending = true; return null }
+        return runCatching {
+            iconCache.get(key, m.modified) {
+                val thumb = context.contentResolver.loadThumbnail(m.uri, android.util.Size(px * 2, px * 2), null)
+                val side = minOf(thumb.width, thumb.height)
+                val square = Bitmap.createBitmap(thumb, (thumb.width - side) / 2, (thumb.height - side) / 2, side, side)
+                Bitmap.createScaledBitmap(square, px, px, true)
+            }
+        }.getOrNull()
     }
 
     /** The user's PS3 games from ARMSX3's exported folder; none if it isn't set up. */
@@ -254,6 +318,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_WIDGET_BUTTON = "widgetButton"
         const val SETTING_BACKUP = "backup"
         const val SETTING_REMOVE_WIDGETS = "removeWidgets"
+        const val SETTING_MEDIA = "media"
         const val SETTING_CLOCK = "clock"
         const val SETTING_SIZE = "size"
         const val SETTING_WALLPAPER = "wallpaper"
