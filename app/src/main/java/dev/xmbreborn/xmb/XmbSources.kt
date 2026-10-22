@@ -105,8 +105,10 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
             Triple(SETTING_SOUNDS, "Interface Sounds", onOff(prefs.sounds)),
             Triple(SETTING_PS3, "PS3 Games", ps3Status()),
             Triple(SETTING_CHIME, "Startup Sound", if (BootChime.file(context) == null) "No sound file" else onOff(prefs.chime)),
+            Triple(SETTING_SIZE, "Text and Icon Size", XmbPrefs.SIZE_NAMES[prefs.size]),
             Triple(SETTING_WIDGET_BUTTON, "Widget Button", onOff(prefs.widgetButton)),
             Triple(SETTING_CLOCK, "Date and Time", onOff(prefs.clock)),
+            Triple(SETTING_WALLPAPER, "Wallpaper", if (wallpaperIsOurs()) "XMB Reborn" else "Not set"),
             Triple(SETTING_BACKUP, "Backup", "Save or restore settings"),
             Triple(SETTING_HIDDEN, "Hidden Apps", prefs.hidden.size.let { if (it == 0) "None" else "$it hidden" }),
         ).map { (key, title, value) ->
@@ -161,6 +163,11 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         }
     }
 
+    /** Whether the system wallpaper is ours (see XmbWallpaper). */
+    fun wallpaperIsOurs(): Boolean = runCatching {
+        android.app.WallpaperManager.getInstance(context).wallpaperInfo?.packageName == context.packageName
+    }.getOrDefault(false)
+
     private fun ps3Status(): String = when {
         Ps3Library.emulator(context.packageManager) == null -> "Needs ARMSX3"
         prefs.ps3Folder == null -> "Choose your games folder"
@@ -188,6 +195,8 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_WIDGET_BUTTON = "widgetButton"
         const val SETTING_BACKUP = "backup"
         const val SETTING_CLOCK = "clock"
+        const val SETTING_SIZE = "size"
+        const val SETTING_WALLPAPER = "wallpaper"
     }
 
     private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {

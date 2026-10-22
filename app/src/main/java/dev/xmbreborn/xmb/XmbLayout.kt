@@ -15,11 +15,15 @@ data class Placement(
     val focus: Float,       // 1 = the focused icon, falling to 0 one step away
 )
 
-/** Pure layout of the bar for a viewport; no GL, so it can be unit-tested. */
-class XmbLayout(val width: Float, val height: Float) {
+/**
+ * Pure layout of the bar for a viewport; no GL, so it can be unit-tested. [scale] enlarges
+ * everything (icons, text and the spacing between them) over the PS3's proportions, which were
+ * made for a TV across the room rather than a phone in the hand (Settings > Text and Icon Size).
+ */
+class XmbLayout(val width: Float, val height: Float, val scale: Float = 1f) {
     val portrait = height > width
     /** Reference pixel -> screen pixel. */
-    val unit = minOf(width, height) / M.REF_SHORT_SIDE
+    val unit = minOf(width, height) / M.REF_SHORT_SIDE * scale
     val anchorX = width * if (portrait) M.ANCHOR_X_PORTRAIT else M.ANCHOR_X_LANDSCAPE
     val anchorY = height * if (portrait) M.ANCHOR_Y_PORTRAIT else M.ANCHOR_Y_LANDSCAPE
 

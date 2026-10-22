@@ -6,7 +6,6 @@ import android.os.SystemClock
 import dev.xmbreborn.xmb.GlyphPainter
 import dev.xmbreborn.xmb.IconTint
 import dev.xmbreborn.xmb.ItemIcon
-import dev.xmbreborn.xmb.MonthPalette
 import dev.xmbreborn.xmb.OptionEntry
 import dev.xmbreborn.xmb.Placement
 import dev.xmbreborn.xmb.XmbLayout
@@ -26,9 +25,7 @@ import kotlin.math.exp
  * other threads post changes with [post], which are drained at the start of each frame.
  */
 class XmbRenderer : GLSurfaceView.Renderer {
-    private val background = Background()
-    private val wave = Wave()
-    private val particles = Particles()
+    private val scene = Scene()
     private val sprites = Sprites()
     private val textures = TextureCache()
     private val pending = ConcurrentLinkedQueue<(XmbRenderer) -> Unit>()
@@ -38,9 +35,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
     private var motion: XmbMotion? = null
     private var icons: Map<String, ItemIcon> = emptyMap()
     private var layout = XmbLayout(1f, 1f)
-    private val colors = FloatArray(15)
     private var lastNanos = 0L
-    private var startNanos = 0L
     /** First frame ever drawn, for the start-up fade (once per launch, not on every return home). */
     private var introNanos = 0L
 
@@ -62,6 +57,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
     @Volatile var labelScale = 1f
     /** Rows show icons only (e.g. beside a wide tray of widgets). */
     @Volatile var labelsHidden = false
+    /** Size over the PS3's proportions (Settings > Text and Icon Size); see [XmbLayout.scale]. */
+    @Volatile var sizeScale = 1f
     /** The PS3's date-and-time bar at the top right (Settings > Date and Time; off by default). */
     @Volatile var showClock = false
 
@@ -70,8 +67,6 @@ class XmbRenderer : GLSurfaceView.Renderer {
 
     /** Background colour: [XmbPrefs.ORIGINAL] follows the month, 0..11 pins one. Eases when changed. */
     var themeColor = XmbPrefs.ORIGINAL
-    private val shown = FloatArray(15)
-    private var shownValid = false
     /** Glyph icons lean toward the background's hue, like the XMB's environment-lit icons. */
     private val glyphTint = FloatArray(3)
 
@@ -202,45 +197,35 @@ class XmbRenderer : GLSurfaceView.Renderer {
         gameBg = null
         gameBgId = null
         requestedBg = null
-        background.init()
-        wave.init()
-        particles.init()
+        scene.init()
         sprites.init()
         textures.clear() // old ids died with the old context
-        startNanos = SystemClock.elapsedRealtimeNanos()
-        lastNanos = startNanos
+        lastNanos = SystemClock.elapsedRealtimeNanos()
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
-        layout = XmbLayout(width.toFloat(), height.toFloat())
+        layout = XmbLayout(width.toFloat(), height.toFloat(), sizeScale)
         lastLayout = layout
     }
 
     override fun onDrawFrame(gl: GL10?) {
         while (true) (pending.poll() ?: break).invoke(this)
+        if (layout.scale != sizeScale) {
+            layout = XmbLayout(layout.width, layout.height, sizeScale)
+            lastLayout = layout
+        }
         val now = SystemClock.elapsedRealtimeNanos()
         val dt = ((now - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
         lastNanos = now
         lastDt = dt
-        val time = (now - startNanos) / 1e9f
         if (introNanos == 0L) introNanos = now
         val intro = (now - introNanos) / 1e9f
 
         val cal = Calendar.getInstance()
-        val hour = cal.get(Calendar.HOUR_OF_DAY) + cal.get(Calendar.MINUTE) / 60f
-        val month = if (themeColor >= 0) themeColor else cal.get(Calendar.MONTH)
-        MonthPalette.colors(month, hour, colors)
-        val k = if (shownValid) 1f - exp(-dt / COLOR_TIME) else 1f
-        for (i in colors.indices) shown[i] += (colors[i] - shown[i]) * k
-        shownValid = true
+        scene.draw(cal, themeColor, dt, layout.width, layout.height)
+        val shown = scene.shown
         IconTint.of(floatArrayOf(shown[12], shown[13], shown[14]), glyphTint)
-        val aspect = layout.width / layout.height
-        background.draw(shown, aspect)
-        val waveLight = 1f - 0.35f * MonthPalette.nightness(hour)
-        wave.draw(time, aspect, waveLight)
-        particles.step(dt, time, aspect)
-        particles.draw(layout.width, layout.height, time, waveLight)
 
         val model = model ?: return
         val motion = motion ?: return
@@ -430,8 +415,6 @@ class XmbRenderer : GLSurfaceView.Renderer {
     }
 
     private companion object {
-        /** Time constant for the background easing to a newly chosen colour (ours). */
-        const val COLOR_TIME = 0.25f
         // Start-up timings (ours): scene out of black over 1.4 s, bar in from 0.9 to 1.9 s.
         const val INTRO_SCENE = 1.4f
         const val INTRO_BAR_START = 0.9f

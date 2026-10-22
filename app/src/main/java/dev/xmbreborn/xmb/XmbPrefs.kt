@@ -79,6 +79,13 @@ class XmbPrefs(context: Context) {
         get() = p.getBoolean("clock", false)
         set(v) = p.edit().putBoolean("clock", v).apply()
 
+    /** Index into [SIZES]: Normal is the PS3's own proportions; Large (the default) suits a phone. */
+    var size: Int
+        get() = p.getInt("size", SIZE_LARGE).coerceIn(0, SIZES.size - 1)
+        set(v) = p.edit().putInt("size", v).apply()
+
+    val sizeScale: Float get() = SIZES[size]
+
     var sounds: Boolean
         get() = p.getBoolean("sounds", true)
         set(v) = p.edit().putBoolean("sounds", v).apply()
@@ -93,6 +100,7 @@ class XmbPrefs(context: Context) {
         put("chime", chime)
         put("widgetButton", widgetButton)
         put("clock", clock)
+        put("size", size)
         put("hidden", JSONArray(hidden.sorted()))
         put("recent", JSONObject().apply { recent.forEach { (id, at) -> put(id, at) } })
     }.toString(2)
@@ -111,6 +119,7 @@ class XmbPrefs(context: Context) {
             .putBoolean("chime", o.optBoolean("chime", true))
             .putBoolean("widgetButton", o.optBoolean("widgetButton", true))
             .putBoolean("clock", o.optBoolean("clock", false))
+            .putInt("size", o.optInt("size", SIZE_LARGE).coerceIn(0, SIZES.size - 1))
             .putStringSet("hidden", hidden)
             .putString("recent", recent.entries.sortedByDescending { it.value }.take(RECENT_KEEP)
                 .joinToString("\n") { "${it.value} ${it.key}" })
@@ -121,5 +130,8 @@ class XmbPrefs(context: Context) {
         const val ORIGINAL = -1
         const val RECENT_KEEP = 60
         const val BACKUP_VERSION = 1
+        val SIZE_NAMES = listOf("Normal", "Large", "Larger")
+        val SIZES = floatArrayOf(1f, 1.25f, 1.5f)
+        const val SIZE_LARGE = 1
     }
 }

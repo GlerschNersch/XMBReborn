@@ -54,5 +54,19 @@
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
         </activity>
+
+        <!-- The XMB background as a live wallpaper (Settings > Wallpaper). -->
+        <service
+            android:name=".XmbWallpaper"
+            android:exported="true"
+            android:label="@string/wallpaper_name"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/wallpaper" />
+        </service>
     </application>
 </manifest>

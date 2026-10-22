@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">XMB Reborn</string>
+    <string name="wallpaper_name">XMB Reborn</string>
+    <string name="wallpaper_description">The XMB wave and month colours, so swiping home from an app shows the same scene XMB Reborn opens on.</string>
 </resources>

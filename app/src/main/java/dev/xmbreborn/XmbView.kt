@@ -99,6 +99,8 @@ class XmbView(
     init {
         setEGLContextClientVersion(3)
         setEGLConfigChooser(8, 8, 8, 8, 0, 0)
+        // Keep shaders and textures across a trip to another app, so the first frame back is quick.
+        preserveEGLContextOnPause = true
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
         isFocusable = true

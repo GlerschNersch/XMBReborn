@@ -88,10 +88,20 @@ class WidgetTrays(
     private var optionsAlpha = 1f
 
     /** Each frame: trays slide and fade with their columns; lists beside a tray make room for it. */
+    /** The bar's size unit the trays were last laid out for. */
+    private var laidOutUnit = 0f
+
     private fun frame() {
         val ids = xmb.renderer.columnIds
         for (c in ids) if (c !in holders) addHolder(c)
-        val spacing = XmbMetrics.CATEGORY_SPACING * minOf(root.width, root.height) / XmbMetrics.REF_SHORT_SIDE
+        val unit = xmb.renderer.lastLayout.unit
+        val spacing = XmbMetrics.CATEGORY_SPACING * unit
+        // Text and Icon Size changed (or the first frame's layout arrived): trays make room again.
+        if (unit != laidOutUnit) {
+            laidOutUnit = unit
+            holders.keys.forEach(::refill)
+            listState = ""
+        }
         // The options panel is drawn by the bar, underneath these views: step aside while it's open.
         val optionsGoal = if (xmb.renderer.optionsShowing) 0f else 1f
         optionsAlpha += (optionsGoal - optionsAlpha) * 0.35f
@@ -255,11 +265,19 @@ class WidgetTrays(
     private val landscape get() = root.width > root.height
 
     /** Where [column]'s tray starts (screen x); the list beside it ends before this. A wide tray
-     *  starts just right of the row icons. */
-    private fun left(column: String) = root.width * when {
-        wide(column) -> if (landscape) WIDE_LEFT_LANDSCAPE else WIDE_LEFT
-        landscape -> LEFT_LANDSCAPE
-        else -> LEFT
+     *  starts just right of the row icons. Either way it keeps clear of the rows at any Text and
+     *  Icon Size: room for the focused icon, or for a few words of label. */
+    private fun left(column: String): Float {
+        val share = root.width * when {
+            wide(column) -> if (landscape) WIDE_LEFT_LANDSCAPE else WIDE_LEFT
+            landscape -> LEFT_LANDSCAPE
+            else -> LEFT
+        }
+        val layout = xmb.renderer.lastLayout
+        val u = layout.unit
+        val clear = if (wide(column)) layout.anchorX + (XmbMetrics.ITEM_ICON_FOCUSED / 2 + ICON_CLEARANCE) * u
+            else layout.anchorX + XmbMetrics.ITEM_LABEL_X * u + LABEL_ROOM_EMS * XmbMetrics.ITEM_LABEL_SIZE * LIST_SCALE * u
+        return maxOf(share, clear).coerceAtMost(root.width * MAX_LEFT)
     }
 
     private fun wide(column: String) = prefs.getBoolean("wide:$column", false)
@@ -544,6 +562,12 @@ class WidgetTrays(
         const val LEFT_LANDSCAPE = 0.40f
         const val TOP_LANDSCAPE = 0.36f
         const val LIST_SCALE = 0.8f
+        /** Label room kept beside a tray, in label heights (about "YT Music"). */
+        const val LABEL_ROOM_EMS = 6f
+        /** Gap between the focused row icon and a wide tray (reference px). */
+        const val ICON_CLEARANCE = 12f
+        /** A tray never starts further right than this share of the width. */
+        const val MAX_LEFT = 0.6f
         /** How much more sideways than vertical a swipe over a widget must be to go to the bar. */
         const val SIDEWAYS = 1.3f
         /** A dragged widget held this close to a side edge (fraction of the width)... */

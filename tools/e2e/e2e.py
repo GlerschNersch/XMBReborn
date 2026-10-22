@@ -165,13 +165,14 @@ def test_fling(d):
 def test_fling_catch(d):
     """Touching the screen during a fling stops it without opening anything."""
     d.go_column("Apps")
-    rows = [n.text for n in d.nodes() if not n.category and n.text != "+"]
+    d.keys(*["DPAD_DOWN"] * 60, pause=1.0)
+    last = d.selected()[1]
     d.to_top()
     d.sh("input swipe 600 1800 600 1400 40; sleep 0.2; input tap 600 1000")
     time.sleep(2.5)
     check(d.foreground(), "the catch tap opened something")
     row = d.selected()[1]
-    check(row in rows and rows.index(row) < len(rows) - 1, f"fling wasn't caught (ended on {row})")
+    check(row != last, f"fling wasn't caught (ran on to the last row, {row})")
 
 
 def test_a11y_click(d):
@@ -422,6 +423,61 @@ def test_clock_setting(d):
         choose_setting(d, "Date and Time", "Off")
 
 
+def test_wallpaper_setting(d):
+    """Settings > Wallpaper opens the system's live-wallpaper preview on ours, and Back returns."""
+    d.go_column("Settings")
+    value = setting_value(d, "Wallpaper")
+    check(value in ("XMB Reborn", "Not set"), f"odd Wallpaper value {value!r}")
+    d.to_top()
+    for _ in range(30):
+        if (d.selected()[1] or "").startswith("Wallpaper"):
+            break
+        d.keys("DPAD_DOWN", pause=0.4)
+    d.keys("ENTER", pause=1.2)
+    entry = next((n for n in d.nodes() if n.text in ("Use XMB Wallpaper", "Set Again")), None)
+    check(entry is not None, "no wallpaper option")
+    d.sh(f"input tap {entry.center[0]} {entry.center[1]}")
+    time.sleep(3)
+    out = d.sh("uiautomator dump /sdcard/xmb_e2e.xml >/dev/null && cat /sdcard/xmb_e2e.xml")
+    check('text="XMB Reborn"' in out and "livepicker" in out, "live wallpaper preview didn't open on ours")
+    d.keys("BACK", pause=2)
+    check(d.foreground(), "Back didn't return to the launcher")
+
+
+def choose_option(d, setting, label):
+    d.go_column("Settings")
+    d.to_top()
+    for _ in range(30):
+        if (d.selected()[1] or "").startswith(setting):
+            break
+        d.keys("DPAD_DOWN", pause=0.4)
+    d.keys("ENTER", pause=1.2)
+    n = next((n for n in d.nodes() if n.text == label), None)
+    check(n is not None, f"no {label!r} for {setting}")
+    d.sh(f"input tap {n.center[0]} {n.center[1]}")
+    time.sleep(1.5)
+
+
+def row_height(d):
+    rows = [n for n in d.nodes() if not n.category and not n.selected and n.text != "+"]
+    return sorted(r.bounds[3] - r.bounds[1] for r in rows)[len(rows) // 2]
+
+
+def test_text_size(d):
+    """Text and Icon Size defaults to Large; Normal makes rows smaller, and Large brings them back."""
+    d.go_column("Settings")
+    check(setting_value(d, "Text and Icon Size") == "Large", "default size should be Large")
+    large = row_height(d)
+    try:
+        choose_option(d, "Text and Icon Size", "Normal")
+        normal = row_height(d)
+        check(setting_value(d, "Text and Icon Size") == "Normal", "size didn't change")
+        check(normal < large * 0.9, f"rows didn't shrink at Normal ({large} -> {normal}px)")
+    finally:
+        choose_option(d, "Text and Icon Size", "Large")
+    check(abs(row_height(d) - large) <= 2, "Large didn't restore the row size")
+
+
 # Any small launchable APK works; TSF Reborn's test app is the one on hand.
 FIXTURE_APK = os.environ.get("XMB_FIXTURE_APK", os.path.join(os.path.dirname(REPO), "TSFReborn", "testkit",
                              "build", "outputs", "apk", "debug", "testkit-debug.apk"))
@@ -466,7 +522,7 @@ def test_no_crash(d):
 
 
 TESTS = [test_tree, test_options_tree, test_dpad, test_fling, test_fling_catch, test_a11y_click, test_home,
-         test_widget_button_setting, test_jump_to_letter, test_letter_keys, test_long_panel_scrolls, test_backup_round_trip, test_clock_setting, test_apps_live, test_landscape, test_no_crash]
+         test_widget_button_setting, test_jump_to_letter, test_letter_keys, test_long_panel_scrolls, test_backup_round_trip, test_clock_setting, test_text_size, test_wallpaper_setting, test_apps_live, test_landscape, test_no_crash]
 
 
 def main():

@@ -2,6 +2,7 @@ package dev.xmbreborn
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
@@ -75,7 +76,7 @@ class MainActivity : Activity() {
         setContentView(root)
         trays = WidgetTrays(this, root, view) { prefs.widgetButton }
         view.requestFocus()
-        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock }
+        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale }
         view.renderer.onWantBackground = { id -> loader.execute { loadGameBackground(id) } }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Home ignores back, except to close the options panel.
@@ -315,7 +316,22 @@ class MainActivity : Activity() {
         XmbSources.SETTING_CHIME -> if (BootChime.file(this) == null) XmbOptions(listOf(OptionEntry("No sound file") {}))
             else onOff(prefs.chime) { on -> prefs.chime = on; if (!on) chime.stop() }
         XmbSources.SETTING_WIDGET_BUTTON -> onOff(prefs.widgetButton) { on -> prefs.widgetButton = on }
+        // Previews each size as it's focused, like Theme Color; Back puts the saved one back.
+        XmbSources.SETTING_SIZE -> XmbOptions(
+            XmbPrefs.SIZE_NAMES.mapIndexed { i, name ->
+                OptionEntry(
+                    label = name,
+                    onFocus = { view.renderer.sizeScale = XmbPrefs.SIZES[i] },
+                    onSelect = { prefs.size = i; refreshSettings() },
+                )
+            },
+            initial = prefs.size,
+            onCancel = { view.renderer.sizeScale = prefs.sizeScale },
+        )
         XmbSources.SETTING_CLOCK -> onOff(prefs.clock) { on -> prefs.clock = on; view.renderer.post { it.showClock = on } }
+        XmbSources.SETTING_WALLPAPER -> XmbOptions(listOf(
+            OptionEntry(if (sources.wallpaperIsOurs()) "Set Again" else "Use XMB Wallpaper") { chooseXmbWallpaper() },
+        ))
         XmbSources.SETTING_BACKUP -> XmbOptions(listOf(
             OptionEntry("Save Backup") { saveBackup() },
             OptionEntry("Restore Backup") { restoreBackup() },
@@ -330,6 +346,21 @@ class MainActivity : Activity() {
             else XmbOptions(hidden.map { app -> OptionEntry("Show ${app.title}") { prefs.setHidden(app.id, false); reload() } })
         }
         else -> error("Unknown setting $key")
+    }
+
+    /**
+     * Opens the system's live-wallpaper preview on ours; the user confirms there (and picks home
+     * and/or lock screen), as Android requires. Settings > Wallpaper shows the result on return.
+     */
+    private fun chooseXmbWallpaper() {
+        val intent = Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+            .putExtra(android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(this, XmbWallpaper::class.java))
+        try {
+            startActivity(intent)
+            reorderOnResume = true // refresh the setting's "XMB Reborn" / "Not set" on return
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "This phone can't set live wallpapers", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
@@ -379,7 +410,7 @@ class MainActivity : Activity() {
     /** After a restore: every setting takes effect at once, as if chosen one by one. */
     private fun applySettings() {
         sfx.enabled = prefs.sounds
-        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock }
+        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale }
         updateAmbient()
         if (!prefs.chime) chime.stop()
         reload()

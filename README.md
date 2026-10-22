@@ -44,9 +44,14 @@ Requires Android 10 or newer and OpenGL ES 3.
     another app plays media.
   - **Interface Sounds:** the menu clicks.
   - **Startup Sound:** plays once after the phone powers on, if you've supplied a sound (see below).
+  - **Text and Icon Size:** Large by default, for a phone held in the hand. Normal keeps the
+    PS3's own proportions, and Larger goes bigger still. Each size previews as you scroll.
   - **Widget Button:** hide the round **+** (Add Widget Here in options still works).
   - **Date and Time:** the PS3's clock bar at the top right. Off by default, since Android's
     status bar already shows the time.
+  - **Wallpaper:** sets the XMB wave and colours as your phone's live wallpaper. With gesture
+    navigation, swiping home from an app plays Android's own animation over the wallpaper before
+    XMB Reborn appears. This makes that moment show the XMB rather than a different picture.
   - **Backup:** save your settings, hidden apps and recent order to a file, or restore them,
     e.g. on a new phone. Widgets and the PS3 folder aren't included; Android ties those to the
     phone they were set up on. Android's own backup carries the same settings.
