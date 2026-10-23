@@ -88,6 +88,22 @@ object IconLighting {
         val l = sqrt(dot(v, v)).takeIf { it > 0 } ?: 1.0
         return doubleArrayOf(v[0] / l, v[1] / l, v[2] / l)
     }
+
+    /**
+     * Whether [bmp] is one of our lit grey icons (r = g = b wherever it shows). The bottom-right
+     * corner is skipped, where Android puts the work-profile badge.
+     */
+    fun isGrey(bmp: android.graphics.Bitmap): Boolean {
+        val w = bmp.width; val h = bmp.height
+        for (y in 0 until h step 3) for (x in 0 until w step 3) {
+            if (x > w * 0.55f && y > h * 0.55f) continue
+            val c = bmp.getPixel(x, y)
+            if (android.graphics.Color.alpha(c) < 32) continue
+            val r = android.graphics.Color.red(c); val g = android.graphics.Color.green(c); val b = android.graphics.Color.blue(c)
+            if (maxOf(r, g, b) - minOf(r, g, b) > 6) return false
+        }
+        return true
+    }
 }
 
 /**

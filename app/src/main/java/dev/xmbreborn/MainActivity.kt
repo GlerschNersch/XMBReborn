@@ -1,12 +1,13 @@
 package dev.xmbreborn
 
-import android.graphics.RectF
+import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
+import android.graphics.RectF
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
@@ -221,6 +222,7 @@ class MainActivity : Activity() {
                 }
                 is Launch.Action -> startActivity(Intent(launch.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 is Launch.Setting -> view.showOptions(settingOptions(launch.key))
+                is Launch.TurnOff -> turnOff(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
                 is Launch.Shortcut -> launcherApps.startShortcut(launch.pkg, launch.id, null, null, launch.user)
                 is Launch.NowPlaying -> if (!nowPlaying.open()) notice.show("Can't open the player", ok = false)
                 is Launch.Media -> startActivity(Intent(Intent.ACTION_VIEW)
@@ -243,9 +245,23 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Locks the screen (or opens the power menu) through [TurnOffService]. Android only allows
+     * that once the user switches the service on, so the first time this explains and goes there.
+     */
+    private fun turnOff(action: Int) {
+        if (TurnOffService.perform(action)) return
+        notice.show("Turn on XMB Reborn Turn Off System in Accessibility", ok = false)
+        runCatching { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+    }
+
     /** The options panel for a row (GL thread). */
     private fun optionsFor(item: XmbItem): XmbOptions? = when (val launch = item.payload) {
         is Launch.Setting -> settingOptions(launch.key)
+        is Launch.TurnOff -> XmbOptions(listOf(
+            OptionEntry("Turn Off Screen") { turnOff(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN) },
+            OptionEntry("Power Options") { turnOff(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG) },
+        ))
         is Launch.Action, is Launch.Ps3 -> XmbOptions(listOf(OptionEntry("Open") { open(item) }, addWidgetEntry()))
         is Launch.Shortcut -> XmbOptions(listOf(
             OptionEntry("Open") { open(item) },
@@ -443,6 +459,12 @@ class MainActivity : Activity() {
             },
             initial = prefs.size,
             onCancel = { view.renderer.sizeScale = prefs.sizeScale },
+        )
+        XmbSources.SETTING_ICONS -> XmbOptions(
+            listOf(false to "Original", true to "XMB Style").map { (xmb, label) ->
+                OptionEntry(label) { if (prefs.xmbIcons != xmb) { prefs.xmbIcons = xmb; reload() } }
+            },
+            initial = if (prefs.xmbIcons) 1 else 0,
         )
         XmbSources.SETTING_CLOCK -> onOff(prefs.clock) { on -> prefs.clock = on; view.renderer.post { it.showClock = on } }
         XmbSources.SETTING_WALLPAPER -> XmbOptions(listOf(

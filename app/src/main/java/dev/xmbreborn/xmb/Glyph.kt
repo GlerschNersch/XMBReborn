@@ -7,6 +7,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.Drawable
+import android.os.Build
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -15,6 +18,8 @@ enum class Glyph {
     // Settings rows, one per kind of setting, as the PS3 gives each its own icon.
     PALETTE, SPEAKER, HOME, DEVICE, TEXT, CLOCK, WIDGETS, HIDDEN, BACKUP, WIFI, BLUETOOTH,
     BRIGHTNESS, BATTERY, INFO,
+    // Users > Turn Off System.
+    POWER,
 }
 
 /**
@@ -24,6 +29,9 @@ enum class Glyph {
  * the background and draws it translucent, as measured.
  */
 object GlyphPainter {
+    /** How much of the square our glyphs' silhouettes span (most reach about 12..88 on the grid). */
+    private const val GLYPH_BOX = 0.74f
+
     fun render(glyph: Glyph, px: Int): Bitmap {
         val s = px / 100f
         val path = path(glyph)
@@ -36,23 +44,82 @@ object GlyphPainter {
         val alpha = FloatArray(px * px) { i -> (bytes.get((i / px) * mask.rowBytes + i % px).toInt() and 0xff) / 255f }
         mask.recycle()
 
-        val shade = IconLighting.shade(alpha, px, px)
-        val lit = Bitmap.createBitmap(IntArray(px * px) { i ->
-            val v = (shade[i].coerceIn(0f, 1f) * 255).toInt()
-            Color.argb((alpha[i] * 255).toInt(), v, v, v)
-        }, px, px, Bitmap.Config.ARGB_8888)
+        val lit = light(alpha, px)
 
         // A faint drop shadow underneath (ICONS.mnu's is barely there).
         val out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(50, 0, 0, 0)
-            maskFilter = BlurMaskFilter(3f * s, BlurMaskFilter.Blur.NORMAL)
-        }
-        c.save(); c.translate(1.5f * s, 2.5f * s); c.scale(s, s); c.drawPath(path, shadow); c.restore()
+        c.save(); c.translate(1.5f * s, 2.5f * s); c.scale(s, s); c.drawPath(path, shadowPaint(s)); c.restore()
         c.drawBitmap(lit, 0f, 0f, null)
         lit.recycle()
         return out
+    }
+
+    /**
+     * An app's monochrome icon layer (Android 13+ themed icons) lit like our glyphs, so apps can
+     * match the XMB's own icons; null when the app has no monochrome layer.
+     */
+    fun renderMonochrome(icon: Drawable, px: Int): Bitmap? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+        val mono = (icon as? AdaptiveIconDrawable)?.monochrome ?: return null
+        // Monochrome art sits small in the middle of its 108 dp layer, so find where it is and
+        // scale it to fill the box our own glyphs use.
+        // (Probed at the usual adaptive-icon size, the layer 1.5x the icon, so thin strokes show.)
+        val probe = RectF(-px / 4f, -px / 4f, px * 1.25f, px * 1.25f)
+        val box = coverage(mono, px, probe).bounds() ?: return null
+        val scale = GLYPH_BOX * px / maxOf(box.width(), box.height())
+        val layer = RectF(
+            px / 2f + (probe.left - box.centerX()) * scale, px / 2f + (probe.top - box.centerY()) * scale,
+            px / 2f + (probe.right - box.centerX()) * scale, px / 2f + (probe.bottom - box.centerY()) * scale,
+        )
+        val (mask, alpha) = coverage(mono, px, layer)
+        val lit = light(alpha, px)
+
+        val s = px / 100f
+        val out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        c.drawBitmap(mask, 1.5f * s, 2.5f * s, shadowPaint(s))
+        c.drawBitmap(lit, 0f, 0f, null)
+        mask.recycle(); lit.recycle()
+        return out
+    }
+
+    /** [d] drawn over [layer] into a [px] square: the mask and its coverage (0..1 per pixel). */
+    private fun coverage(d: Drawable, px: Int, layer: RectF): Pair<Bitmap, FloatArray> {
+        val mask = Bitmap.createBitmap(px, px, Bitmap.Config.ALPHA_8)
+        val r = android.graphics.Rect().also(layer::round)
+        d.setBounds(r)
+        d.draw(Canvas(mask))
+        val bytes = java.nio.ByteBuffer.allocate(mask.rowBytes * px)
+        mask.copyPixelsToBuffer(bytes)
+        return mask to FloatArray(px * px) { i -> (bytes.get((i / px) * mask.rowBytes + i % px).toInt() and 0xff) / 255f }
+    }
+
+    /** The box around a mask's visible pixels, or null if it's blank. */
+    private fun Pair<Bitmap, FloatArray>.bounds(): RectF? {
+        val (mask, alpha) = this
+        val px = mask.width
+        mask.recycle()
+        var l = px; var t = px; var r = -1; var b = -1
+        for (i in alpha.indices) if (alpha[i] > 0.2f) {
+            val x = i % px; val y = i / px
+            if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y
+        }
+        return if (r < l) null else RectF(l.toFloat(), t.toFloat(), r + 1f, b + 1f)
+    }
+
+    /** Coverage [alpha] (0..1 per pixel) embossed and lit as a grey, glassy pillow. */
+    private fun light(alpha: FloatArray, px: Int): Bitmap {
+        val shade = IconLighting.shade(alpha, px, px)
+        return Bitmap.createBitmap(IntArray(px * px) { i ->
+            val v = (shade[i].coerceIn(0f, 1f) * 255).toInt()
+            Color.argb((alpha[i] * 255).toInt(), v, v, v)
+        }, px, px, Bitmap.Config.ARGB_8888)
+    }
+
+    private fun shadowPaint(s: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(50, 0, 0, 0)
+        maskFilter = BlurMaskFilter(3f * s, BlurMaskFilter.Blur.NORMAL)
     }
 
     /** Builds a silhouette from solid parts and cut-outs, applied in order (no even-odd surprises). */
@@ -246,6 +313,11 @@ object GlyphPainter {
             cut { addCircle(50f, 50f, 32f, Path.Direction.CW) }
             add { addCircle(50f, 30f, 5.5f, Path.Direction.CW) }
             add { addRoundRect(RectF(45f, 42f, 55f, 74f), 2f, 2f, Path.Direction.CW) }
+        }
+        // The power symbol: a ring open at the top, with a bar through the gap.
+        Glyph.POWER -> shape {
+            add { ring(50f, 54f, 34f, 25f, -60f, 300f) }
+            add { addRoundRect(RectF(45f, 12f, 55f, 54f), 5f, 5f, Path.Direction.CW) }
         }
     }
 }

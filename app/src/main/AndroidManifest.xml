@@ -39,6 +39,7 @@
             android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTask"
+            android:resumeWhilePausing="true"
             android:stateNotNeeded="true"
             android:taskAffinity="">
             <intent-filter>
@@ -76,6 +77,19 @@
         <!-- The XMB background as a live wallpaper (Settings > Wallpaper). In its own process, so
              its GL never competes with the launcher's while either starts, and a wallpaper fault
              can't take home down with it. -->
+        <service
+            android:name=".TurnOffService"
+            android:exported="true"
+            android:label="@string/turn_off_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/turn_off_service" />
+        </service>
+
         <service
             android:name=".XmbWallpaper"
             android:process=":wallpaper"

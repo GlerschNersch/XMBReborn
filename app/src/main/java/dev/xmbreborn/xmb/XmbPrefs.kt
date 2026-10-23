@@ -79,6 +79,11 @@ class XmbPrefs(context: Context) {
         get() = p.getBoolean("clock", false)
         set(v) = p.edit().putBoolean("clock", v).apply()
 
+    /** Draw apps' monochrome icons lit like the XMB's own (apps without one keep their colours). */
+    var xmbIcons: Boolean
+        get() = p.getBoolean("xmbIcons", false)
+        set(v) = p.edit().putBoolean("xmbIcons", v).apply()
+
     /** Index into [SIZES]: Normal is the PS3's own proportions; Large (the default) suits a phone. */
     var size: Int
         get() = p.getInt("size", SIZE_LARGE).coerceIn(0, SIZES.size - 1)
@@ -106,6 +111,7 @@ class XmbPrefs(context: Context) {
         put("widgetButton", widgetButton)
         put("clock", clock)
         put("size", size)
+        put("xmbIcons", xmbIcons)
         put("folders", JSONObject(p.getString(UserFolders.KEY, "{}")!!))
         put("hidden", JSONArray(hidden.sorted()))
         put("recent", JSONObject().apply { recent.forEach { (id, at) -> put(id, at) } })
@@ -126,6 +132,7 @@ class XmbPrefs(context: Context) {
             .putBoolean("widgetButton", o.optBoolean("widgetButton", true))
             .putBoolean("clock", o.optBoolean("clock", false))
             .putInt("size", o.optInt("size", SIZE_LARGE).coerceIn(0, SIZES.size - 1))
+            .putBoolean("xmbIcons", o.optBoolean("xmbIcons", false))
             .putString(UserFolders.KEY, o.optJSONObject("folders")?.toString() ?: "{}")
             .putStringSet("hidden", hidden)
             .putString("recent", recent.entries.sortedByDescending { it.value }.take(RECENT_KEEP)

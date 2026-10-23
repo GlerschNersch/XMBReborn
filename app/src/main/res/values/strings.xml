@@ -3,4 +3,6 @@
     <string name="app_name">XMB Reborn</string>
     <string name="wallpaper_name">XMB Reborn</string>
     <string name="wallpaper_description">The XMB wave and month colours, so swiping home from an app shows the same scene XMB Reborn opens on.</string>
+    <string name="turn_off_service_label">XMB Reborn Turn Off System</string>
+    <string name="turn_off_service_description">Lets Users > Turn Off System in XMB Reborn lock the screen like the power button. It reads nothing on screen.</string>
 </resources>

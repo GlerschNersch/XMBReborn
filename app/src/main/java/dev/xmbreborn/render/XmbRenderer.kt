@@ -409,9 +409,10 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val wide = icon is ItemIcon.Bitmap && icon.wide
         val iconW = if (wide) XmbLayout.lerp(M.GAME_ICON_WIDTH, M.GAME_ICON_WIDTH_FOCUSED, p.focus) * layout.unit else p.size
         val iconH = if (wide) iconW * M.GAME_ICON_ASPECT else p.size
-        // Apps keep their own colours; our glyphs are lit, tinted and translucent like the XMB's.
+        // Apps keep their own colours; our glyphs (and XMB-style app icons) are lit, tinted and
+        // translucent like the XMB's.
         if (tex != null) {
-            if (icon is ItemIcon.Of) sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade * IconTint.OPACITY, glyphTint)
+            if (icon is ItemIcon.Of || (icon is ItemIcon.Bitmap && icon.lit)) sprites.draw(tex.id, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size, p.alpha * fade * IconTint.OPACITY, glyphTint)
             else sprites.draw(tex.id, p.x - iconW / 2, p.y - iconH / 2, iconW, iconH, p.alpha * fade)
         }
 

@@ -31,12 +31,17 @@ sealed interface Launch {
     data class Media(val uri: String, val video: Boolean) : Launch
     /** One of the user's own folders of apps in [column]; opening it shows them. */
     data class UserFolder(val column: String, val id: String) : Launch
+    /** Users > Turn Off System: locks the screen, as the PS3's turns the console off. */
+    data object TurnOff : Launch
 }
 
 /** An item's picture: an app's own icon, or one of our glyphs. */
 sealed interface ItemIcon {
-    /** [wide]: a PS3 game icon (320x176), drawn at its own shape rather than square. */
-    class Bitmap(val bitmap: android.graphics.Bitmap, val wide: Boolean = false) : ItemIcon
+    /**
+     * [wide]: a PS3 game icon (320x176), drawn at its own shape rather than square. [lit]: an
+     * app's monochrome icon lit like our glyphs, so it's tinted and translucent like them too.
+     */
+    class Bitmap(val bitmap: android.graphics.Bitmap, val wide: Boolean = false, val lit: Boolean = false) : ItemIcon
     class Of(val glyph: Glyph) : ItemIcon
 }
 
@@ -123,6 +128,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val games = byRecency(ps3Games() + apps.filter { it.category == ApplicationInfo.CATEGORY_GAME }.map { it.item }, recent)
         val settings = settingsItems()
         return listOf(
+            XmbCategory("users", "Users", Glyph.USER, usersItems()),
             XmbCategory("settings", "Settings", Glyph.SETTINGS, settings),
             XmbCategory("photo", "Photo", Glyph.PHOTO, appsIn("photo", ApplicationInfo.CATEGORY_IMAGE) + photoAlbums),
             XmbCategory("music", "Music", Glyph.MUSIC, nowPlayingRow() + appsIn("music", ApplicationInfo.CATEGORY_AUDIO)),
@@ -135,6 +141,13 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         ).filter { it.id != "shortcuts" || it.items.isNotEmpty() }
     }
 
+    /** The PS3's Users column; here it holds Turn Off System, which locks the screen. */
+    private fun usersItems(): List<XmbItem> {
+        val id = "action:turnOff"
+        icons[id] = ItemIcon.Of(Glyph.POWER)
+        return listOf(XmbItem(id, "Turn Off System", "Lock the screen", Launch.TurnOff))
+    }
+
     private class LoadedApp(val item: XmbItem, val category: Int)
 
     private fun loadApps(iconPx: Int): List<LoadedApp> {
@@ -144,6 +157,8 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         iconCache.resetStats()
         val recent = prefs.recent
         val now = System.currentTimeMillis()
+        val xmbStyle = prefs.xmbIcons
+        val me = android.os.Process.myUserHandle()
         for (user in launcherApps.listedProfiles) {
             for (info in launcherApps.getActivityList(null, user)) {
                 val component = info.componentName
@@ -151,9 +166,14 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
                 val id = "app:${component.flattenToShortString()}#${user.hashCode()}"
                 // Drawing every icon is most of a rebuild's time; reuse it until the app updates.
                 val version = runCatching { context.packageManager.getPackageInfo(component.packageName, 0).lastUpdateTime }.getOrDefault(0L)
-                val bitmap = iconCache.get("$id@$iconPx", version) { rasterize(info.getBadgedIcon(0), iconPx) }
-                usedIconKeys += "$id@$iconPx"
-                icons[id] = ItemIcon.Bitmap(bitmap)
+                // XMB-style icons are cached apart; apps with no monochrome layer keep their colours.
+                val key = if (xmbStyle) "$id@$iconPx/xmb" else "$id@$iconPx"
+                val bitmap = iconCache.get(key, version) {
+                    (if (xmbStyle) xmbIcon(info.getIcon(0), user.takeIf { it != me }, iconPx) else null)
+                        ?: rasterize(info.getBadgedIcon(0), iconPx)
+                }
+                usedIconKeys += key
+                icons[id] = ItemIcon.Bitmap(bitmap, lit = xmbStyle && IconLighting.isGrey(bitmap))
                 // The focused row's info line, as the PS3 shows under a game: when it was last used.
                 val item = XmbItem(id, info.label.toString(), recent[id]?.let { lastOpened(it, now) }, Launch.App(component, user))
                 out.add(LoadedApp(item, info.applicationInfo.category))
@@ -173,9 +193,10 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         val color = prefs.color.let { if (it == XmbPrefs.ORIGINAL) "Original" else MonthPalette.NAMES[it] }
         fun onOff(v: Boolean) = if (v) "On" else "Off"
         return listOf(
-            folder("theme", "Theme Settings", "Colour, size, wallpaper and clock", Glyph.PALETTE, listOf(
+            folder("theme", "Theme Settings", "Colour, size, icons, wallpaper and clock", Glyph.PALETTE, listOf(
                 setting(SETTING_COLOR, "Theme Color", color, Glyph.PALETTE),
                 setting(SETTING_SIZE, "Text and Icon Size", XmbPrefs.SIZE_NAMES[prefs.size], Glyph.TEXT),
+                setting(SETTING_ICONS, "App Icons", if (prefs.xmbIcons) "XMB Style" else "Original", Glyph.APPS),
                 setting(SETTING_WALLPAPER, "Wallpaper", if (wallpaperIsOurs()) "XMB Reborn" else "Not set", Glyph.PHOTO),
                 setting(SETTING_CLOCK, "Date and Time", onOff(prefs.clock), Glyph.CLOCK),
             )),
@@ -340,7 +361,16 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_NOW_PLAYING = "nowPlaying"
         const val SETTING_CLOCK = "clock"
         const val SETTING_SIZE = "size"
+        const val SETTING_ICONS = "icons"
         const val SETTING_WALLPAPER = "wallpaper"
+    }
+
+    /** The app's monochrome layer lit like our glyphs, with the work badge for another profile's app. */
+    private fun xmbIcon(icon: android.graphics.drawable.Drawable, user: UserHandle?, px: Int): Bitmap? {
+        val lit = GlyphPainter.renderMonochrome(icon, px) ?: return null
+        if (user == null) return lit
+        val badged = context.packageManager.getUserBadgedIcon(android.graphics.drawable.BitmapDrawable(context.resources, lit), user)
+        return rasterize(badged, px).also { lit.recycle() }
     }
 
     private fun rasterize(icon: android.graphics.drawable.Drawable, px: Int): Bitmap {
