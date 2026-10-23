@@ -79,6 +79,11 @@ class XmbPrefs(context: Context) {
         get() = p.getBoolean("clock", false)
         set(v) = p.edit().putBoolean("clock", v).apply()
 
+    /** Index of the Backdrop drawn behind the bar (0 = the PS3's wave). */
+    var backdrop: Int
+        get() = p.getInt("backdrop", 0).coerceAtLeast(0)
+        set(v) = p.edit().putInt("backdrop", v).apply()
+
     /** Draw apps' monochrome icons lit like the XMB's own (apps without one keep their colours). */
     var xmbIcons: Boolean
         get() = p.getBoolean("xmbIcons", false)
@@ -112,6 +117,7 @@ class XmbPrefs(context: Context) {
         put("clock", clock)
         put("size", size)
         put("xmbIcons", xmbIcons)
+        put("backdrop", backdrop)
         put("folders", JSONObject(p.getString(UserFolders.KEY, "{}")!!))
         put("hidden", JSONArray(hidden.sorted()))
         put("recent", JSONObject().apply { recent.forEach { (id, at) -> put(id, at) } })
@@ -133,6 +139,7 @@ class XmbPrefs(context: Context) {
             .putBoolean("clock", o.optBoolean("clock", false))
             .putInt("size", o.optInt("size", SIZE_LARGE).coerceIn(0, SIZES.size - 1))
             .putBoolean("xmbIcons", o.optBoolean("xmbIcons", false))
+            .putInt("backdrop", o.optInt("backdrop", 0).coerceAtLeast(0))
             .putString(UserFolders.KEY, o.optJSONObject("folders")?.toString() ?: "{}")
             .putStringSet("hidden", hidden)
             .putString("recent", recent.entries.sortedByDescending { it.value }.take(RECENT_KEEP)

@@ -19,6 +19,7 @@ import android.os.UserHandle
 import android.util.Log
 import android.view.WindowManager
 import android.window.OnBackInvokedDispatcher
+import dev.xmbreborn.render.Backdrop
 import dev.xmbreborn.xmb.Launch
 import dev.xmbreborn.xmb.MonthPalette
 import dev.xmbreborn.xmb.OptionEntry
@@ -89,7 +90,7 @@ class MainActivity : Activity() {
         sources.nowPlayingAllowed = { nowPlaying.allowed }
         trays = WidgetTrays(this, root, view, notice) { prefs.widgetButton }
         view.requestFocus()
-        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale }
+        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale; it.backdrop = Backdrop.of(prefs.backdrop) }
         view.renderer.onWantBackground = { id -> loader.execute { loadGameBackground(id) } }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Home ignores back, except to close the options panel.
@@ -460,6 +461,18 @@ class MainActivity : Activity() {
             initial = prefs.size,
             onCancel = { view.renderer.sizeScale = prefs.sizeScale },
         )
+        // Previews each background as it's focused, like Theme Color; Back puts the saved one back.
+        XmbSources.SETTING_BACKDROP -> XmbOptions(
+            Backdrop.entries.map { b ->
+                OptionEntry(
+                    label = b.label,
+                    onFocus = { view.renderer.backdrop = b },
+                    onSelect = { prefs.backdrop = b.ordinal; refreshSettings() },
+                )
+            },
+            initial = Backdrop.of(prefs.backdrop).ordinal,
+            onCancel = { view.renderer.backdrop = Backdrop.of(prefs.backdrop) },
+        )
         XmbSources.SETTING_ICONS -> XmbOptions(
             listOf(false to "Original", true to "XMB Style").map { (xmb, label) ->
                 OptionEntry(label) { if (prefs.xmbIcons != xmb) { prefs.xmbIcons = xmb; reload() } }
@@ -571,7 +584,7 @@ class MainActivity : Activity() {
     /** After a restore: every setting takes effect at once, as if chosen one by one. */
     private fun applySettings() {
         sfx.enabled = prefs.sounds
-        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale }
+        view.renderer.post { it.themeColor = prefs.color; it.showClock = prefs.clock; it.sizeScale = prefs.sizeScale; it.backdrop = Backdrop.of(prefs.backdrop) }
         updateAmbient()
         if (!prefs.chime) chime.stop()
         reload()

@@ -6,7 +6,8 @@ import java.util.Calendar
 import kotlin.math.exp
 
 /**
- * Everything behind the bar: the month gradient, the wave and the sparkles. The launcher draws it
+ * Everything behind the bar: the month gradient, the wave and the sparkles, or one of the
+ * shader [Backdrop]s (Canyon, Earth) coloured by the same gradient. The launcher draws it
  * under its icons, and [XmbWallpaper] draws it alone, so the system's own home animation (which a
  * third-party home can't replace) plays over the same scene.
  *
@@ -17,6 +18,9 @@ class Scene {
     private val background = Background()
     private val wave = Wave()
     private val particles = Particles()
+    private val canyon = Canyon()
+    private val earth = Earth()
+    private val offscreen = Offscreen()
     private val colors = FloatArray(15)
 
     /** The gradient as last drawn (eased toward the target colours); centre is [12..14]. */
@@ -27,13 +31,16 @@ class Scene {
         background.init()
         wave.init()
         particles.init()
+        canyon.init()
+        earth.init()
+        offscreen.init()
     }
 
     /**
      * Draws the scene for [cal]'s time of day; [themeColor] is a month index or negative to follow
      * the calendar. Returns the wave's brightness (dimmer at night) for anything drawn over it.
      */
-    fun draw(cal: Calendar, themeColor: Int, dt: Float, width: Float, height: Float): Float {
+    fun draw(cal: Calendar, themeColor: Int, dt: Float, width: Float, height: Float, backdrop: Backdrop = Backdrop.WAVE): Float {
         val hour = cal.get(Calendar.HOUR_OF_DAY) + cal.get(Calendar.MINUTE) / 60f
         val month = if (themeColor >= 0) themeColor else cal.get(Calendar.MONTH)
         MonthPalette.colors(month, hour, colors)
@@ -42,8 +49,14 @@ class Scene {
         shownValid = true
         val aspect = width / height
         val time = now()
-        background.draw(shown, aspect)
         val waveLight = 1f - 0.35f * MonthPalette.nightness(hour)
+        if (backdrop != Backdrop.WAVE) {
+            offscreen.begin()
+            (if (backdrop == Backdrop.CANYON) canyon else earth).draw(time, aspect, shown, waveLight)
+            offscreen.end()
+            return waveLight
+        }
+        background.draw(shown, aspect)
         wave.draw(time, aspect, waveLight)
         particles.step(dt, time, aspect)
         particles.draw(width, height, time, waveLight)

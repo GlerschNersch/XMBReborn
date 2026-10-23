@@ -197,6 +197,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
                 setting(SETTING_COLOR, "Theme Color", color, Glyph.PALETTE),
                 setting(SETTING_SIZE, "Text and Icon Size", XmbPrefs.SIZE_NAMES[prefs.size], Glyph.TEXT),
                 setting(SETTING_ICONS, "App Icons", if (prefs.xmbIcons) "XMB Style" else "Original", Glyph.APPS),
+                setting(SETTING_BACKDROP, "Background", dev.xmbreborn.render.Backdrop.of(prefs.backdrop).label, Glyph.PHOTO),
                 setting(SETTING_WALLPAPER, "Wallpaper", if (wallpaperIsOurs()) "XMB Reborn" else "Not set", Glyph.PHOTO),
                 setting(SETTING_CLOCK, "Date and Time", onOff(prefs.clock), Glyph.CLOCK),
             )),
@@ -362,6 +363,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         const val SETTING_CLOCK = "clock"
         const val SETTING_SIZE = "size"
         const val SETTING_ICONS = "icons"
+        const val SETTING_BACKDROP = "backdrop"
         const val SETTING_WALLPAPER = "wallpaper"
     }
 

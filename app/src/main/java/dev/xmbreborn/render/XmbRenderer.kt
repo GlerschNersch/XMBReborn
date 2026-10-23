@@ -64,6 +64,8 @@ class XmbRenderer : GLSurfaceView.Renderer {
     @Volatile var sizeScale = 1f
     /** The PS3's date-and-time bar at the top right (Settings > Date and Time; off by default). */
     @Volatile var showClock = false
+    /** What's drawn behind the bar (Theme Settings > Background). */
+    @Volatile var backdrop = Backdrop.WAVE
 
     /** Height of the system bar over the top of the surface, so the clock stays below it. */
     var topInset = 0f
@@ -230,7 +232,7 @@ class XmbRenderer : GLSurfaceView.Renderer {
         val intro = (now - introNanos) / 1e9f
 
         val cal = Calendar.getInstance()
-        scene.draw(cal, themeColor, dt, layout.width, layout.height)
+        scene.draw(cal, themeColor, dt, layout.width, layout.height, backdrop)
         val shown = scene.shown
         IconTint.of(floatArrayOf(shown[12], shown[13], shown[14]), glyphTint)
 

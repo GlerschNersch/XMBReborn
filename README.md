@@ -37,6 +37,10 @@ Requires Android 10 or newer and OpenGL ES 3.
 - **Your own folders:** "New Folder" files the app into a folder in that column, and "Move to…"
   adds more. Hold a folder to **Rename** or **Delete** it; deleting puts its apps back.
 - **Home** while you're already home glides back to the top of the Apps column.
+- **Users > Turn Off System** locks the screen, like the power button; its options add **Power
+  Options** (Android's power menu). Android only allows this through an accessibility service,
+  so the first time it opens Accessibility settings: switch on **XMB Reborn Turn Off System**.
+  The service watches nothing on screen; it only performs the lock.
 - **"Add to Home screen"** from other apps (Chrome, Maps…) puts the shortcut in a **Shortcuts**
   column.
 - **Settings** column, in folders as on the PS3. Open one to slide its list in; press Back,
@@ -46,6 +50,13 @@ Requires Android 10 or newer and OpenGL ES 3.
       background previews each colour as you scroll.
     - **Text and Icon Size:** Large by default, for a phone held in the hand. Normal keeps the
       PS3's own proportions, and Larger goes bigger still. Each size previews as you scroll.
+    - **App Icons:** **XMB Style** draws each app's monochrome icon (the one Android 13+ uses for
+      themed icons) lit and tinted like the XMB's own icons. Apps without one keep their colours.
+    - **Background:** **Original** is the PS3's wave. **Canyon** is a slow flight down a misty
+      canyon, and **Earth** is the planet from orbit, with clouds, city lights at night and a
+      glowing atmosphere. Both are our own shaders, after scenes in the PS3 firmware, and Canyon
+      takes its colours from Theme Color. Each previews as you scroll. They work the GPU harder
+      than the wave.
     - **Wallpaper:** sets the XMB wave and colours as your phone's live wallpaper. With gesture
       navigation, swiping home from an app plays Android's own animation over the wallpaper
       before XMB Reborn appears. This makes that moment show the XMB rather than a different picture.

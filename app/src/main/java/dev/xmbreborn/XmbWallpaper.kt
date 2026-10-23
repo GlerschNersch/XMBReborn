@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
+import dev.xmbreborn.render.Backdrop
 import dev.xmbreborn.render.Scene
 import dev.xmbreborn.xmb.XmbPrefs
 import java.util.Calendar
@@ -74,9 +75,10 @@ class XmbWallpaper : WallpaperService() {
         private var height = 1f
         private var lastNanos = 0L
         @Volatile private var themeColor = prefs.color
+        @Volatile private var backdrop = Backdrop.of(prefs.backdrop)
 
-        /** Theme Color may have changed in the launcher while the wallpaper was hidden. */
-        fun refreshPrefs() { themeColor = prefs.color }
+        /** Theme Color or Background may have changed in the launcher while the wallpaper was hidden. */
+        fun refreshPrefs() { themeColor = prefs.color; backdrop = Backdrop.of(prefs.backdrop) }
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
             scene.init()
@@ -93,7 +95,7 @@ class XmbWallpaper : WallpaperService() {
             val now = SystemClock.elapsedRealtimeNanos()
             val dt = ((now - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
             lastNanos = now
-            scene.draw(Calendar.getInstance(), themeColor, dt, width, height)
+            scene.draw(Calendar.getInstance(), themeColor, dt, width, height, backdrop)
         }
     }
 }

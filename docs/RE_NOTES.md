@@ -241,7 +241,7 @@ slides the bar one column left per folder (`XmbMetrics.FOCUS_TIME_CONSTANT`, as 
 the folder's icon in the focused row's line. In portrait the slide is capped so that icon stays
 on screen.
 
-## `qgl/canyon.qrc` and `qgl/earth.qrc` (not yet built)
+## `qgl/canyon.qrc` and `qgl/earth.qrc`
 
 Both are separate animated scenes with their own shaders and plain-text `.mnu` parameters
 (`#MNU_1.0`, then `NAME:float:value` per line). `re/tools/mnu_table.py` gathers them into a table.
@@ -262,3 +262,14 @@ Both are separate animated scenes with their own shaders and plain-text `.mnu` p
 
 Where the PS3 shows these isn't confirmed yet (themes, music visualizers, something else?). Next
 step: find them in RPCS3 and capture their motion, as we did for the wave.
+
+**Built (2026-10-23) as Theme Settings > Background, from the parts listed above only.** No preset
+values, textures, tables or shaders are used; both are our own full-screen fragment shaders
+(`render/Canyon.kt`, `render/Earth.kt`), drawn at half resolution (`render/Offscreen.kt`):
+- Canyon: raymarched procedural height field (value-noise fbm walls around a wandering centre
+  line), fog and sky from the month gradient, and a guide line where the ray meets a plane above
+  the valley floor.
+- Earth: ray-sphere planet with fbm continents, ice, ocean glint, a second fbm cloud layer, city
+  lights past the terminator, and a limb glow inside and outside the sphere. Spins are whole turns
+  per hour, so the hourly clock wrap doesn't jump. Canyon's camera does jump once an hour.
+If a capture ever shows the real scenes, re-tune camera, speed, fog and colours against it.
