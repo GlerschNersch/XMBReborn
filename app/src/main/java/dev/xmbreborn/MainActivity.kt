@@ -1,5 +1,6 @@
 package dev.xmbreborn
 
+import android.graphics.RectF
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
@@ -209,11 +210,12 @@ class MainActivity : Activity() {
         view.renderer.post { it.model?.category("settings")?.replaceItems(items) }
     }
 
-    private fun open(item: XmbItem) {
+    private fun open(item: XmbItem, icon: RectF? = null) {
         try {
             when (val launch = item.payload) {
                 is Launch.App -> {
-                    launcherApps.startMainActivity(launch.component, launch.user, null, null)
+                    val from = LaunchFrom.of(view, icon)
+                    launcherApps.startMainActivity(launch.component, launch.user, from?.sourceBounds, from?.options)
                     prefs.markOpened(item.id)
                     reorderOnResume = true
                 }

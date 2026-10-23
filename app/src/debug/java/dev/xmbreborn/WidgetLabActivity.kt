@@ -52,7 +52,7 @@ class WidgetLabActivity : Activity() {
             else -> Mode.DASHBOARD
         }
         host = AppWidgetHost(this, HOST_ID)
-        val xmb = XmbView(this, Sfx(), {}, { null })
+        val xmb = XmbView(this, Sfx(), { _, _ -> }, { null })
         val root = FrameLayout(this).apply { addView(xmb) }
         setContentView(root)
         loadBar(xmb, mode)

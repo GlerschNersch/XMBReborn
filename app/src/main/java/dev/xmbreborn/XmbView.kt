@@ -1,5 +1,6 @@
 package dev.xmbreborn
 
+import android.graphics.RectF
 import android.annotation.SuppressLint
 import android.content.Context
 import android.opengl.GLSurfaceView
@@ -30,7 +31,8 @@ import kotlin.math.hypot
 class XmbView(
     context: Context,
     private val sfx: Sfx,
-    private val onOpen: (XmbItem) -> Unit,
+    /** Opens an item; the rect is its icon's on-screen square (view pixels) for the launch animation. */
+    private val onOpen: (XmbItem, RectF?) -> Unit,
     /** Builds an item's options (called on the GL thread); null if it has none. */
     private val optionsFor: (XmbItem) -> XmbOptions?,
 ) : GLSurfaceView(context) {
@@ -228,7 +230,10 @@ class XmbView(
         if (cat.open()) { sfx.play(Sfx.Kind.DECIDE); a11y.contentChanged(); return }
         if (item.payload is Launch.Setting) { showOptionsFor(r); return }
         sfx.play(Sfx.Kind.DECIDE)
-        post { onOpen(item) }
+        val m = r.model
+        val icon = r.lastPlacements.firstOrNull { m != null && it.isRow && it.category == m.focus && it.item == cat.focus }
+            ?.let { RectF(it.x - it.size / 2, it.y - it.size / 2, it.x + it.size / 2, it.y + it.size / 2) }
+        post { onOpen(item, icon) }
     }
 
     @SuppressLint("ClickableViewAccessibility")

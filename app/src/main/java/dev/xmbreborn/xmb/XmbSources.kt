@@ -12,6 +12,7 @@ import android.os.UserHandle
 import android.provider.Settings
 import dev.xmbreborn.BootChime
 import dev.xmbreborn.Shortcuts
+import dev.xmbreborn.listedProfiles
 import java.text.Collator
 
 /** What opening an item does. */
@@ -143,7 +144,7 @@ class XmbSources(private val context: Context, private val prefs: XmbPrefs) {
         iconCache.resetStats()
         val recent = prefs.recent
         val now = System.currentTimeMillis()
-        for (user in launcherApps.profiles) {
+        for (user in launcherApps.listedProfiles) {
             for (info in launcherApps.getActivityList(null, user)) {
                 val component = info.componentName
                 if (component.packageName == self) continue

@@ -23,7 +23,7 @@ object Shortcuts {
         }.filter { it.isEnabled }.sortedWith(compareBy({ !it.isDeclaredInManifest }, { it.rank })).take(PER_APP)
 
     /** Everything pinned to this launcher, for every profile, in pinning order. */
-    fun pinned(apps: LauncherApps): List<ShortcutInfo> = apps.profiles.flatMap { user ->
+    fun pinned(apps: LauncherApps): List<ShortcutInfo> = apps.listedProfiles.flatMap { user ->
         query(apps, user) { setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED) }
     }.filter { it.isPinned }
 
