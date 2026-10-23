@@ -201,6 +201,7 @@ def test_home(d):
 FOLDER_OF = {
     "Theme Color": "Theme Settings", "Text and Icon Size": "Theme Settings",
     "Wallpaper": "Theme Settings", "Date and Time": "Theme Settings",
+    "Background": "Theme Settings", "App Icons": "Theme Settings",
     "Interface Sounds": "Sound Settings", "Ambient Sound": "Sound Settings", "Startup Sound": "Sound Settings",
     "Widget Button": "Home Settings", "Hidden Apps": "Home Settings", "Backup": "Home Settings",
     "Remove Widgets": "Home Settings", "Photos and Videos": "Home Settings", "Now Playing in Music": "Sound Settings",
@@ -609,9 +610,15 @@ FIXTURE_PKG, FIXTURE_TITLE = "dev.tsfreborn.testkit", "TSF Testkit"
 
 
 def apps_rows_near_end(d):
+    """Rows seen in the last few screens of Apps (the fixture sorts near the end, but how near
+    depends on what else the emulator has installed)."""
     d.go_column("Apps")
     d.keys(*["DPAD_DOWN"] * 60, pause=1.2)
-    return [n.text for n in d.nodes() if not n.category and n.text != "+"]
+    seen = []
+    for _ in range(3):
+        seen += [n.text for n in d.nodes() if not n.category and n.text != "+"]
+        d.keys(*["DPAD_UP"] * 5, pause=1.0)
+    return seen
 
 
 def wait_for(d, cond, seconds=8):
@@ -639,6 +646,40 @@ def test_apps_live(d):
     check(wait_for(d, lambda: FIXTURE_TITLE in apps_rows_near_end(d)), "reinstalled app didn't come back")
 
 
+def test_users_turn_off(d):
+    """Users is the first column; with its service off, Turn Off System opens Accessibility settings."""
+    d.home_intent()
+    d.go_column("Users")
+    d.keys("DPAD_LEFT", pause=0.6)
+    check(d.selected()[0] == "Users", "Users should be the leftmost column")
+    d.to_top()
+    row = d.selected()[1] or ""
+    check(row.startswith("Turn Off System"), f"focused row is {row!r}")
+    if "TurnOffService" in d.sh("settings get secure enabled_accessibility_services"):
+        print("  (service is on: skipped opening it, which would lock the screen)")
+        return
+    d.keys("ENTER", pause=2.5)
+    out = d.sh("dumpsys activity activities | grep -m1 topResumedActivity")
+    check("Accessibility" in out or "accessibility" in out, f"didn't open Accessibility settings: {out.strip()}")
+    d.keys("BACK", pause=2)
+    check(d.foreground(), "Back didn't return to the launcher")
+
+
+def test_background_setting(d):
+    """Theme Settings > Background defaults to Original; Canyon and Earth apply and Original comes back."""
+    focus_setting(d, "Background")
+    check(setting_value(d, "Background") == "Original", "Background should default to Original")
+    try:
+        for name in ("Canyon", "Earth"):
+            choose_setting(d, "Background", name)
+            time.sleep(1.5)
+            check(setting_value(d, "Background") == name, f"Background didn't change to {name}")
+            check(d.foreground(), f"launcher left the screen after choosing {name}")
+    finally:
+        choose_setting(d, "Background", "Original")
+    check(setting_value(d, "Background") == "Original", "Background didn't go back to Original")
+
+
 def test_no_crash(d):
     """Nothing in the app crashed during the run."""
     log = d.sh(f"logcat -d -b crash")
@@ -646,7 +687,7 @@ def test_no_crash(d):
 
 
 TESTS = [test_tree, test_folders, test_options_tree, test_dpad, test_fling, test_fling_catch, test_a11y_click, test_home,
-         test_widget_button_setting, test_jump_to_letter, test_letter_keys, test_long_panel_scrolls, test_backup_round_trip, test_clock_setting, test_text_size, test_wallpaper_setting, test_user_folder, test_remove_widget_by_drag, test_settings_rows, test_apps_live, test_landscape, test_no_crash]
+         test_widget_button_setting, test_jump_to_letter, test_letter_keys, test_long_panel_scrolls, test_backup_round_trip, test_clock_setting, test_text_size, test_wallpaper_setting, test_user_folder, test_remove_widget_by_drag, test_settings_rows, test_apps_live, test_users_turn_off, test_background_setting, test_landscape, test_no_crash]
 
 
 def main():
