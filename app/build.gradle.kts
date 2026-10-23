@@ -11,8 +11,8 @@ android {
         applicationId = "dev.xmbreborn"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.4.3"
+        versionCode = 10
+        versionName = "0.4.4"
     }
 
     // Release signing comes from ~/.gradle/gradle.properties (never the repo). Without it, release
